@@ -73,18 +73,28 @@ while True:
     contours, _ = cv2.findContours(table_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Filter for large rectangular contours
-    for contour in contours:
-        # Approximate the contour to a polygon
-        perimeter = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+    # for contour in contours:
+    #     # Approximate the contour to a polygon
+    #     perimeter = cv2.arcLength(contour, True)
+    #     approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
         
-        # Check if the polygon has 4 sides (potential rectangle/table)
-        if len(approx) == 4:
-            area = cv2.contourArea(contour)
-            if area > 400:  # Assuming the table will have a significant area
-                # Draw the contour on the original image
-                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
-                # break
+    #     # Check if the polygon has 4 sides (potential rectangle/table)
+    #     if len(approx) == 4:
+    #         area = cv2.contourArea(contour)
+    #         if area > 400:  # Assuming the table will have a significant area
+    #             # Draw the contour on the original image
+    #             cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
+    #             # break
+
+    # Get the two largest contours (likely two parts of the table)
+    contours_by_perimeter = [(cv2.arcLength(contour, True), contour) for contour in contours]
+    two_largest_contours = [contour for perimeter, contour in sorted(contours_by_perimeter, key=lambda x: x[0], reverse=True)[:2]]
+    # cv2.drawContours(frame, two_largest_contours, -1, (0, 255, 0), 3)
+
+    # Combine the two largest contours with a convex hull, and simplify using approxPolyDP
+    # if len(two_largest_contours) > 1:
+    #     cv2.drawContours(frame, cv2.convexHull(np.concatenate(two_largest_contours[0], two_largest_contours[1])), -1, (0, 255, 0), 3)
+    
 
     # find contour
     # ret, thresh = cv2.threshold(gray, 127, 255, 0)
