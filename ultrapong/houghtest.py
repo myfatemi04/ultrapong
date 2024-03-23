@@ -53,9 +53,37 @@ while True:
     # gray = ((frame * kernel).sum(axis=-1) / frame.sum(axis=-1) * 255).astype(np.uint8)
     # gray = cv2.medianBlur(gray, 5)
 
-    gray = ((frame/255.0 >= (np.array([0.0, 0.2, 0.8]))).all(axis=-1) & (frame/255.0 <= (np.array([0.7, 1.0, 1.0]))).all(axis=-1)).astype(np.uint8) * 255
+    frame_blurred = cv2.medianBlur(frame, 5)
+    ball_mask = ((frame/255.0 >= (np.array([0.0, 0.2, 0.8]))).all(axis=-1) & (frame/255.0 <= (np.array([0.7, 1.0, 1.0]))).all(axis=-1)).astype(np.uint8) * 255
+    table_mask = (
+        (frame/255.0 >= (np.array([0.2, 0.0, 0.0]))).all(axis=-1) & 
+        (frame/255.0 <= (np.array([0.6, 0.4, 0.6]))).all(axis=-1)
+        # (frame[..., 0] > frame[..., 1]) &
+        # (frame_blurred[..., 0] > frame_blurred[..., 2] * 0.5)
+    ).astype(np.uint8) * 255
+    
+    history.append(ball_mask)
 
-    history.append(gray)
+    # Find ball contours
+    ball_contours, _ = cv2.findContours(ball_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+
+    # Find table contours
+    contours, _ = cv2.findContours(table_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Filter for large rectangular contours
+    for contour in contours:
+        # Approximate the contour to a polygon
+        perimeter = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+        
+        # Check if the polygon has 4 sides (potential rectangle/table)
+        if len(approx) == 4:
+            area = cv2.contourArea(contour)
+            if area > 400:  # Assuming the table will have a significant area
+                # Draw the contour on the original image
+                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
+                # break
 
     # find contour
     # ret, thresh = cv2.threshold(gray, 127, 255, 0)
@@ -98,7 +126,8 @@ while True:
         frame[frame_2 > 0, ...] = 255
 
     cv2.imshow('frame', frame)
-    cv2.imshow('gray', gray)
+    cv2.imshow('ball_mask', ball_mask)
+    cv2.imshow('table_mask', table_mask)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
