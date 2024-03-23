@@ -56,9 +56,10 @@ while True:
     frame_blurred = cv2.medianBlur(frame, 5)
     ball_mask = ((frame/255.0 >= (np.array([0.0, 0.2, 0.8]))).all(axis=-1) & (frame/255.0 <= (np.array([0.7, 1.0, 1.0]))).all(axis=-1)).astype(np.uint8) * 255
     table_mask = (
-        (frame/255.0 >= (np.array([0.2, 0.0, 0.0]))).all(axis=-1) & 
-        (frame/255.0 <= (np.array([0.6, 0.4, 0.6]))).all(axis=-1)
-        # (frame[..., 0] > frame[..., 1]) &
+        (frame/255.0 >= (np.array([0.15, 0.15, 0.15]))).all(axis=-1) & 
+        (frame/255.0 <= (np.array([0.5, 0.4, 0.4]))).all(axis=-1) &
+        (frame[..., 2].astype(np.short) - frame[..., 0].astype(np.short) < 15) &
+        (frame[..., 2].astype(np.short) - frame[..., 1].astype(np.short) < 15)
         # (frame_blurred[..., 0] > frame_blurred[..., 2] * 0.5)
     ).astype(np.uint8) * 255
     
