@@ -3,6 +3,9 @@ import numpy as np
 
 cap = cv2.VideoCapture(0)
 
+snapshot_counter = 1
+take_snapshot = False
+
 while True:
     ret, frame = cap.read()
 
@@ -19,6 +22,10 @@ while True:
 
     if circles is not None:
         circles = circles[0]
+
+        if cv2.waitKey(1) & 0xFF == ord('s'):
+            take_snapshot = True
+
         for (x, y, r) in circles:
             x = int(x)
             y = int(y)
@@ -30,8 +37,16 @@ while True:
             if not (avg_color[0] > 0.6 and avg_color[1] > 0.6 and avg_color[1] > 0.6):
                 continue
 
+            if take_snapshot:
+                print(f"Circle for snapshot {snapshot_counter}:", x, y, r)
+
             cv2.circle(frame, (x, y), r, (0, 255, 0), 4)
             cv2.rectangle(frame, (x-5, y-5), (x+5, y+5), (0, 128, 255), -1)
+        
+        if take_snapshot:
+            cv2.imwrite(f"snapshot-{snapshot_counter}.jpg", frame)
+            snapshot_counter += 1
+            take_snapshot = False
 
     cv2.imshow('frame', frame)
 
