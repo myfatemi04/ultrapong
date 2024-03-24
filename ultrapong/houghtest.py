@@ -11,7 +11,7 @@ DO_PLAYBACK = True
 
 if DO_PLAYBACK:
     assert not DO_CAPTURE
-    cap = cv2.VideoCapture("video_0.mp4")
+    cap = cv2.VideoCapture("video.mp4")
 else:
     cap = cv2.VideoCapture(int(sys.argv[1]))
     cap.set(cv2.CAP_PROP_FPS, 60)
@@ -64,7 +64,7 @@ try:
         """
         We combine several filters to create final result, and hope that the ball is the only one that matches all of them.
 
-        1. Color filter: We search for neon colors - colors with high saturation.
+        1. High Saturation OR Orange
         """
         target_r = 0.6666
         target_g = 0.3333
@@ -83,18 +83,35 @@ try:
         # look for cases where other basis vectors are low
 
         frame_dot[frame_dot < 0] = 0
-        ratio = frame_dot[..., 0] / (((frame_dot[..., 1]) ** 2 + (frame_dot[..., 2]) ** 2) ** 0.5 + 1e-6)
+        ratio = frame_dot[..., 0] / (np.linalg.norm(frame_dot, axis=-1) + 1e-6)
         ratio_u8 = np.minimum(100 * ratio, 255).astype(np.uint8)
         # ratio_u8 = cv2.equalizeHist(ratio_u8)
         ratio_u8 = cv2.GaussianBlur(ratio_u8, (5, 5), 0)
 
         cv2.imshow('ratio_orig', ratio_u8)
+
+        # ratio_u8_normalized = ratio_u8[:]
+
+        # normalize locally
+        # norm_size = 10
+        # for start_x in range(0, ratio_u8.shape[0], norm_size):
+        #     for start_y in range(0, ratio_u8.shape[1], norm_size):
+        #         block = ratio_u8[start_x:start_x + norm_size, start_y:start_y + norm_size]
+        #         block_orig = block.copy()
+        #         block_mean = block.mean()
+        #         block_std = block.std()
+        #         block = (block - block_mean) / max(1, block_std)
+        #         block = np.clip(block, -1, 1)
+        #         block = (block + 1) * 127.5
+        #         block_merged = (block * 0.5 + block_orig * 0.5)
+        #         ratio_u8_normalized[start_x:start_x + norm_size, start_y:start_y + norm_size] = block_merged.astype(np.uint8)
+        # cv2.imshow('ratio_normalized', ratio_u8_normalized)
+
         # calculate an adaptive threshold
         sanity_check = ratio_u8 > 100
-        adaptive_check = cv2.adaptiveThreshold(ratio_u8, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2)
+        BLOCK_SIZE = 25
+        adaptive_check = cv2.adaptiveThreshold(ratio_u8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, BLOCK_SIZE, -2)
         ratio_u8 = cv2.bitwise_and(sanity_check.astype(np.uint8) * 255, adaptive_check)
-
-        cv2.imshow('ratio', ratio_u8)
 
         high_orangeness = ratio_u8 > 200
         dark = frame.mean(axis=-1) < 50
@@ -169,7 +186,6 @@ try:
             area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
 
             print(solidity, eccentricity, area, area_penalty)
-            # input()
 
             # kill tail end detections
             # if not is_near_previous_detection:
@@ -235,7 +251,7 @@ try:
         cv2.imshow('frame', frame)
         # cv2.imshow('ball_mask', ball_mask)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(0) & 0xFF == ord('q'):
             break
 except KeyboardInterrupt:
     print("Interrupted.")
