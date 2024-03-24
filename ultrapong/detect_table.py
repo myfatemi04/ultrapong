@@ -2,22 +2,8 @@ import time
 import cv2
 import numpy as np
 from collections import deque
-import torch
 
-cap = cv2.VideoCapture(1)
-isImage = True
-
-timestamps = deque(maxlen=10)
-
-while True:
-    ret, frame = cap.read()
-
-    timestamps.append(time.time())
-    if len(timestamps) > 1:
-        fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-        #print(fps)
-
-    downsample = 4
+def detect_table(frame):
     frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
 
     # Detect circles
@@ -67,7 +53,35 @@ while True:
                     cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
 
     potential_contours.sort(key=cv2.contourArea, reverse=True)
-    
+
+    if len(potential_contours) == 2:
+        moment0 = cv2.moments(potential_contours[0])
+        moment1 = cv2.moments(potential_contours[1])
+        cx1, cy1 = int(moment0["m10"] / moment0["m00"]), int(moment0["m01"] / moment0["m00"])
+        cx2, cy2 = int(moment1["m10"] / moment1["m00"]), int(moment1["m01"] / moment1["m00"])
+
+        # returns left contour and then right contour
+        if cx1 < cx2:
+            return potential_contours[0], potential_contours[1]
+        else:
+            return potential_contours[1], potential_contours[0]
+
+cap = cv2.VideoCapture(1)
+isImage = True
+
+timestamps = deque(maxlen=10)
+
+while True:
+    ret, frame = cap.read()
+
+    timestamps.append(time.time())
+    if len(timestamps) > 1:
+        fps = len(timestamps) / (timestamps[-1] - timestamps[0])
+        #print(fps)
+
+    downsample = 4
+
+
     cv2.imshow('frame', frame)
     cv2.imshow('table_mask', table_mask)
     key = cv2.waitKey(1)
