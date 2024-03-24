@@ -117,6 +117,10 @@ def main():
                     cv2.drawContours(valid_ball_bounce_hitbox, [C[0], C[1]], -1, 255, -1)
                     valid_ball_bounce_hitbox = cv2.dilate(valid_ball_bounce_hitbox, kernel, iterations=10)
                     table_detection = C
+
+                    middle_top, middle_bottom = get_table_points(table_detection)
+                    max_y = middle_bottom[1]
+                    roi_mask[int(max_y):, :] = 0
                     
             pause = False
             if match_state.current_state() == 'standby':
