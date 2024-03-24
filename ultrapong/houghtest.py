@@ -6,6 +6,7 @@ from collections import deque
 import cv2
 import numpy as np
 from velocities import VelocityClassifier
+import sort
 
 DO_CAPTURE = False
 DO_PLAYBACK = True
@@ -46,7 +47,7 @@ previous_frame = None
 min_x = 0.1
 max_x = 0.9
 
-event_handler = VelocityClassifier(history_length=90, visualize=True)
+event_handler = VelocityClassifier(history_length=90, visualize=False)
 # ball_filter = 
 
 downsample = 4
@@ -60,6 +61,8 @@ frame_width = 1920 // downsample
 frame_height = 1080 // downsample
 
 recent_detections = deque(maxlen=4)
+
+tracker = sort.Sort()
 
 counter = 0
 try:
@@ -100,10 +103,10 @@ try:
         # Calculate hue similarity.
         # hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
         # hue_difference = hue_difference.astype(np.uint8)
-        hue = HSV[..., 0].copy()
-        hue[hue < 20] = 0
-        hue *= 12
-        cv2.imshow('hue', hue)
+        # hue = HSV[..., 0].copy()
+        # hue[hue < 20] = 0
+        # hue *= 12
+        # cv2.imshow('hue', hue)
 
         # calculate saturation mean
         # window_size = 11
@@ -157,8 +160,9 @@ try:
 
         # Erode and dilate.
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        ball_mask = cv2.erode(ball_mask, kernel, iterations=1)
-        ball_mask = cv2.dilate(ball_mask, kernel, iterations=1)
+        iters = 2
+        ball_mask = cv2.erode(ball_mask, kernel, iterations=iters)
+        ball_mask = cv2.dilate(ball_mask, kernel, iterations=iters)
 
         #### Select region of interest ####
 
@@ -180,6 +184,13 @@ try:
             cY = int(M["m01"] / M["m00"])
 
             # https://docs.opencv.org/4.x/d1/d32/tutorial_py_contour_properties.html
+
+            # get bbox
+            x, y, w, h = cv2.boundingRect(contour)
+            x1 = x
+            y1 = y
+            x2 = x + w
+            y2 = y + h
 
             # get area of contour
             area = cv2.contourArea(contour)
@@ -214,22 +225,22 @@ try:
             # compare to prior distribution
             cx_mean = 0.5 * frame_width
             cy_mean = 0.5 * frame_height
-            cx_std = 0.3 * frame_width
-            cy_std = 0.3 * frame_height
+            cx_std = 0.1 * frame_width
+            cy_std = 0.1 * frame_height
             cx_penalty = (cX - cx_mean) ** 2 / cx_std ** 2
             cy_penalty = (cY - cy_mean) ** 2 / cy_std ** 2
             score -= (cx_penalty + cy_penalty) * 25
             
             # compare to previous detection. penalize distance from previous detections.
             kill = False
-            for i_ in range(len(recent_detections)):
-                weight = 0.8 ** i_
-                distance = np.linalg.norm(np.array([cX, cY]) - np.array(recent_detections[-i_]))
-                score -= distance * weight * 10
+            # for i_ in range(len(recent_detections)):
+            #     weight = 0.8 ** i_
+            #     distance = np.linalg.norm(np.array([cX, cY]) - np.array(recent_detections[-i_]))
+            #     score -= distance * weight * 10
 
             # kill tail end detections
             # if not is_near_previous_detection:
-            kill = kill or (area < 25 or area > 200 or eccentricity > 10 or solidity < 0.2)
+            kill = kill or (area < 20 or area > 200 or eccentricity > 10 or solidity < 0.2)
             if kill:
                 cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
                 continue
@@ -237,19 +248,28 @@ try:
             target_x = (1920 // downsample) / 2
             laterality = ((target_x - int(cX)) / target_x) ** 2
 
-            if DO_PLAYBACK:
-                print(solidity, eccentricity, area, area_penalty, laterality)
+            # if DO_PLAYBACK:
+            #     print(solidity, eccentricity, area, area_penalty, laterality)
 
             score += solidity * 10 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation
-            contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty, laterality))
+            contours_with_scores.append((score, contour, (x1, x2, y1, y2), solidity, eccentricity, area, area_penalty, laterality))
 
         ball_mask_color = cv2.cvtColor(ball_mask, cv2.COLOR_GRAY2BGR)
 
         contours_with_scores.sort(key=lambda x: x[0], reverse=True)
+
         if len(contours_with_scores) > 0:
+            print("Providing", len(contours_with_scores), "detections.")
+            # object_ids = tracker.update(np.array([
+            #     # x1, y1, x2, y2, score
+            #     np.array([*bbox, 1.0])
+            #     for score, contour, bbox, *_ in contours_with_scores
+            # ]))
+            # print(object_ids)
+
             score, contour, *other = contours_with_scores[0]
 
-            solidity, eccentricity, area, area_penalty, laterality = other
+            bbox, solidity, eccentricity, area, area_penalty, laterality = other
 
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
