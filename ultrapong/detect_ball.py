@@ -38,7 +38,7 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
 
     saturation_mask = HSV[..., 1].copy()
     saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 0, saturation_mask)
-    # saturation_mask = saturation_mask & (HSV[..., 1].copy() > 50)
+    saturation_mask = saturation_mask & (HSV[..., 1].copy() > 50)
 
     value_mask = HSV[..., 2] > 40
     # value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]

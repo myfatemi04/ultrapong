@@ -26,9 +26,8 @@ def speak_async(text: str):
     os.system(f"say '{text}' &")
 
 def main():
-
     DO_CAPTURE = False
-    DO_PLAYBACK = True
+    DO_PLAYBACK = not DO_CAPTURE
     DO_STEP_BY_STEP = False
 
     if DO_PLAYBACK:
@@ -223,45 +222,47 @@ def main():
                                 print("RESULT", result)
                         else:
                             print("Net hit by player 2, but too far from the net.")
-                    else:
-                        ball_lost_counter += 1
-                        if ball_lost_counter > 90: # if no other action is detected for 3 seconds
-                            result = match_state.transition("ball_lost")
-                            if PRINT_RESULTS:
-                                print("ball_lost")
-
-                    s = match_state.current_state()
-                    if "_loses" in s:
-                        pause = True
-                        print("Someone lost!")
-                        match_state._current_state = "start"
-
-                        comms = ""
-                        if s == 'p1_loses':
-                            match_outcome = point_tracker.update(2)
-                            if not DO_PLAYBACK:
-                                comms = commentary.get_commentary(2, num_hits_this_round)
-                            else:
-                                comms = f"Player 2 scored."
-                        elif s == 'p2_loses':
-                            match_outcome = point_tracker.update(1)
-                            if not DO_PLAYBACK:
-                                comms = commentary.get_commentary(1, num_hits_this_round)
-                            else:
-                                comms = f"Player 1 scored."
-
-                        num_hits_this_round = 0
-
-                        if match_outcome is not None:
-                            comms += f" Player {match_outcome} wins!"
-                            match_state._current_state = "standby"
-                            point_tracker.reset()
-                            commentary.reset()
-                            
-                        speak_async(comms)
 
                     # draw the filtered detection
                     cv2.circle(frame, (int(x_), int(y_)), 10, (255, 0, 0), 3)
+                else:
+                    S = match_state.current_state()
+                    if 'liable' in S:
+                        print("increasing ball_lost_counter")
+                        ball_lost_counter += 1
+                        if ball_lost_counter > 10: # if no other action is detected for 3 seconds
+                            result = match_state.transition("ball_lost")
+                            print("ball_lost")
+
+                s = match_state.current_state()
+                if "_loses" in s:
+                    pause = True
+                    print("Someone lost!")
+                    match_state._current_state = "start"
+
+                    comms = ""
+                    if s == 'p1_loses':
+                        match_outcome = point_tracker.update(2)
+                        # if not DO_PLAYBACK:
+                        #     comms = commentary.get_commentary(2, num_hits_this_round)
+                        # else:
+                        comms = f"Player 2 scored."
+                    elif s == 'p2_loses':
+                        match_outcome = point_tracker.update(1)
+                        # if not DO_PLAYBACK:
+                        #     comms = commentary.get_commentary(1, num_hits_this_round)
+                        # else:
+                        comms = f"Player 1 scored."
+
+                    num_hits_this_round = 0
+
+                    if match_outcome is not None:
+                        comms += f" Player {match_outcome} wins!"
+                        match_state._current_state = "standby"
+                        point_tracker.reset()
+                        commentary.reset()
+                        
+                    speak_async(comms)
 
                 # frame[ball_mask > 0] = 255 # type: ignore
             cv2.imshow('frame', frame)
