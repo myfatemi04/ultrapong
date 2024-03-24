@@ -85,12 +85,8 @@ def main():
             artificial_time += 0.1
 
             if DO_PLAYBACK:
-                if counter < 350:
-                    time.sleep(0)
-                else:
+                if counter >= 250:
                     input()
-                    pass
-                pass
             else:
                 timestamps.append(time.time())
                 if len(timestamps) > 1:
@@ -113,22 +109,26 @@ def main():
                     valid_ball_bounce_hitbox = cv2.dilate(valid_ball_bounce_hitbox, kernel, iterations=4)
                     table_detection = C
                     
+            pause = False
             if match_state.current_state() == 'standby':
                 pass
             elif table_detection is not None:
                 # Table has been found!
+                # Visualize the table.
+                frame[valid_ball_bounce_hitbox > 0, :] = (0, 0, 255)
+                middle_top, middle_bottom = get_table_points(table_detection)
+                
                 current_time = time.time() if not DO_PLAYBACK else artificial_time
                 time_since_previous_detection = (current_time - previous_detection_timestamp) if previous_detection_timestamp is not None else None
-                detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height, previous_detection, time_since_previous_detection)
+                detection, ball_mask, ball_mask_color, frame = detect_ball(raw_frame.copy(), previous_frame, roi_mask, frame_width, frame_height, previous_detection, time_since_previous_detection)
                 previous_frame = raw_frame
 
-                frame[valid_ball_bounce_hitbox > 0, :] = (0, 0, 255)
+                frame[ball_mask > 0] = 255
 
                 if detection is not None:
+                    cv2.circle(frame, (detection[0], detection[1]), 20, (0, 255, 255), 5)
                     previous_detection = detection
                     previous_detection_timestamp = current_time
-
-                middle_top, middle_bottom = get_table_points(table_detection)
 
                 cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
 
@@ -143,9 +143,12 @@ def main():
 
                 if detection is not None:
                     (x_, y_, x_bounce_left, x_bounce_right, y_bounce, bounce_location) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1], valid_ball_bounce_hitbox)
-                    x_bounce = x_bounce_left or x_bounce_right
-                    if x_bounce:
-                        input()
+                    pause = x_bounce_left or x_bounce_right
+                    
+                    print(x_bounce_left, x_bounce_right, y_bounce, bounce_location, ball_side)
+                    if bounce_location is not None:
+                        bounce_net_offset = get_net_offset(middle_top, middle_bottom, bounce_location[0], bounce_location[1])
+
                     result = None
                     PRINT_RESULTS = True
                     if y_bounce and ball_side == 0:
@@ -166,24 +169,30 @@ def main():
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
-                    elif x_bounce_right and ball_side == 0 and abs(net_offset) < 20:
-                        ball_lost_counter = 0
-                        result = match_state.transition("net_hit_by_player_1")
-                        if PRINT_RESULTS:
-                            print("net_hit_by_player_1", "ball_side", ball_side, detection[0])
-                            print("RESULT", result)
+                    elif x_bounce_right and ball_side == 0:
+                        if abs(bounce_net_offset) < 20:
+                            ball_lost_counter = 0
+                            result = match_state.transition("net_hit_by_player_1")
+                            if PRINT_RESULTS:
+                                print("net_hit_by_player_1", "ball_side", ball_side, detection[0])
+                                print("RESULT", result)
+                        else:
+                            print("Net hit by player 1, but too far from the net.")
                     elif x_bounce_right and ball_side == 1:
                         ball_lost_counter = 0
                         result = match_state.transition("ball_hit_by_player_2")
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
-                    elif x_bounce_left and ball_side == 1 and abs(net_offset) < 20:
-                        ball_lost_counter = 0
-                        result = match_state.transition("net_hit_by_player_2")
-                        if PRINT_RESULTS:
-                            print("net_hit_by_player_2", "ball_side", ball_side, detection[0])
-                            print("RESULT", result)
+                    elif x_bounce_left and ball_side == 1:
+                        if abs(bounce_net_offset) < 20:
+                            ball_lost_counter = 0
+                            result = match_state.transition("net_hit_by_player_2")
+                            if PRINT_RESULTS:
+                                print("net_hit_by_player_2", "ball_side", ball_side, detection[0])
+                                print("RESULT", result)
+                        else:
+                            print("Net hit by player 2, but too far from the net.")
                     elif detection[1] > middle_bottom[1]:
                         ball_lost_counter += 1
                         if ball_lost_counter > 20:
@@ -193,6 +202,7 @@ def main():
 
                     s = match_state.current_state()
                     if "_loses" in s:
+                        pause = True
                         print("Someone lost!")
                         match_state._current_state = "standby"
 
@@ -216,6 +226,9 @@ def main():
 
                 # frame[ball_mask > 0] = 255 # type: ignore
             cv2.imshow('frame', frame)
+
+            if pause:
+                input()
 
             key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF
             if key == ord('q'):

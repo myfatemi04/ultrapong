@@ -147,7 +147,7 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
         certified_dogwater_detection = (area < 5 or area > 200 or eccentricity > 10 or convexity < 0.2)
 
         if time_since_previous_pose is not None and previous_pose is not None:
-            if time_since_previous_pose < 0.2:
+            if time_since_previous_pose < 1:
                 distance = np.sqrt((cX - previous_pose[0]) ** 2 + (cY - previous_pose[1]) ** 2)
                 speed = distance / time_since_previous_pose
                 if (speed * 0.1) > 100:
@@ -189,8 +189,6 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
         M = cv2.moments(contour)
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
-
-        cv2.circle(frame, (cX, cY), 20, (0, 255, 255), 5)
         
         # if DO_PLAYBACK:
         #     print(f"{score=:.4f} {convexity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f}")
