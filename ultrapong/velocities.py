@@ -114,7 +114,7 @@ class BallTracker:
                 print('ignoring point', x_, y_, 'dt', dt)
                 return x_, y_, False, False, False, None
 
-        x_, y_ = self.filter(x_, y_, dt)
+        # x_, y_ = self.filter(x_, y_, dt)
 
         self.buf.append((t_, x_, y_))
         self.counter += 1
@@ -133,8 +133,8 @@ class BallTracker:
             # if vy[-2] > 0.5 and vy[-1] < -0.1:\
             y = np.array([y for t, x, y in self.buf])
             x = np.array([x for t, x, y in self.buf])
-            y_smooth = np.convolve(y, np.ones(3) / 3, mode='same').astype(int)
-            y = y_smooth
+            # y_smooth = np.convolve(y, np.ones(3) / 3, mode='same').astype(int)
+            # y = y_smooth
 
             min_time_between_x_bounces = 0.7
             min_time_between_y_bounces = 0.7
@@ -162,6 +162,9 @@ class BallTracker:
                 if elapsed > min_time_between_y_bounces:
                     self.last_vertical_bounce = t_
                     print('y bounce detected', t_)
+
+                    print(y)
+
                     y_bounce = True
 
         return x_, y_, x_bounce_left, x_bounce_right, y_bounce, ((x[-2], y[-2]) if len(self.buf) >= 3 else None)

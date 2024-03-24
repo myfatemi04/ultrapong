@@ -26,13 +26,12 @@ def speak_async(text: str):
     os.system(f"say '{text}' &")
 
 def main():
-    DO_CAPTURE = False
+    DO_CAPTURE = len(sys.argv) == 2
     DO_PLAYBACK = not DO_CAPTURE
     DO_STEP_BY_STEP = False
 
     if DO_PLAYBACK:
-        assert not DO_CAPTURE
-        cap = cv2.VideoCapture("video.mp4")
+        cap = cv2.VideoCapture(sys.argv[2])
     else:
         cap = cv2.VideoCapture(int(sys.argv[1]))
         cap.set(cv2.CAP_PROP_FPS, 60)
@@ -162,8 +161,8 @@ def main():
                     (x_, y_, x_bounce_left, x_bounce_right, y_bounce, bounce_location) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1], valid_ball_bounce_hitbox)
                     pause = x_bounce_left or x_bounce_right
                     
-                    if DO_PLAYBACK:
-                        print(x_bounce_left, x_bounce_right, y_bounce, bounce_location, ball_side)
+                    # if DO_PLAYBACK:
+                    #     print(x_bounce_left, x_bounce_right, y_bounce, bounce_location, ball_side)
                     if bounce_location is not None:
                         bounce_net_offset = get_net_offset(middle_top, middle_bottom, bounce_location[0], bounce_location[1])
 
@@ -283,7 +282,10 @@ def main():
     if writer is not None:
         writer.release()
         print("::: Correcting Video Format :::")
-        os.system("ffmpeg -i video_tmp.mp4 video.mp4")
+        c = 0
+        while os.path.exists(f"video_{c}.mp4"):
+            c += 1
+        os.system(f"ffmpeg -i video_tmp.mp4 video_{c}.mp4")
         os.system("rm video_tmp.mp4")
 
 
