@@ -47,11 +47,19 @@ min_x = 0.1
 max_x = 0.9
 
 event_handler = VelocityClassifier(history_length=90, visualize=True)
+# ball_filter = 
 
-roi_mask = (np.ones((1080//4, 1920//4)) * 255).astype(np.uint8)
+downsample = 4
+
+roi_mask = (np.ones((1080//downsample, 1920//downsample)) * 255).astype(np.uint8)
 roi_mask[:, :int(min_x * roi_mask.shape[1])] = 0
 roi_mask[:, int(max_x * roi_mask.shape[1]):] = 0
 roi_mask[int(0.8 * roi_mask.shape[0]):, :] = 0
+
+frame_width = 1920 // downsample
+frame_height = 1080 // downsample
+
+recent_detections = deque(maxlen=4)
 
 counter = 0
 try:
@@ -88,12 +96,30 @@ try:
 
         frame_blurred = cv2.GaussianBlur(frame, (11, 11), 0)
         HSV = cv2.cvtColor(frame_blurred, cv2.COLOR_BGR2HSV)
+        
         # Calculate hue similarity.
-        hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
-        # Calculate the brightness.
-        brightness = HSV[..., 2]
+        # hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
+        # hue_difference = hue_difference.astype(np.uint8)
+        hue = HSV[..., 0].copy()
+        hue[hue < 20] = 0
+        hue *= 12
+        cv2.imshow('hue', hue)
 
-        hue_difference = hue_difference.astype(np.uint8)
+        # calculate saturation mean
+        # window_size = 11
+        # padded = np.pad(HSV[..., 1], window_size // 2, mode='edge')
+        # saturation_mean = np.zeros_like(HSV[..., 1], dtype=float)
+        # saturation_variance = np.zeros_like(HSV[..., 1], dtype=float)
+        # for i in range(window_size):
+        #     for j in range(window_size):
+        #         saturation_mean += padded[i:i+HSV.shape[0], j:j+HSV.shape[1]]
+        #         saturation_variance += padded[i:i+HSV.shape[0], j:j+HSV.shape[1]] ** 2
+
+        # saturation_mean /= float(window_size ** 2)
+        # saturation_variance /= float(window_size ** 2)
+        # # Visualize saturation [normalized]
+        # saturation_normalized = (HSV[..., 1] - saturation_mean) / (saturation_variance ** 0.5 + 1e-6)
+        # cv2.imshow('saturation_normalized', saturation_normalized)
 
         saturation_mask = HSV[..., 1].copy()
         saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
@@ -133,8 +159,6 @@ try:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         ball_mask = cv2.erode(ball_mask, kernel, iterations=1)
         ball_mask = cv2.dilate(ball_mask, kernel, iterations=1)
-
-        cv2.imshow('ball_mask', ball_mask)
 
         #### Select region of interest ####
 
@@ -186,18 +210,26 @@ try:
             area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
 
             score = 0
-            trustworthy = (0.3 < cX/(1920//downsample) < 0.7)
-            if trustworthy:
-                score += 1000000
+
+            # compare to prior distribution
+            cx_mean = 0.5 * frame_width
+            cy_mean = 0.5 * frame_height
+            cx_std = 0.3 * frame_width
+            cy_std = 0.3 * frame_height
+            cx_penalty = (cX - cx_mean) ** 2 / cx_std ** 2
+            cy_penalty = (cY - cy_mean) ** 2 / cy_std ** 2
+            score -= (cx_penalty + cy_penalty) * 25
             
-            # compare to previous detection
-            if previous_detection is not None:
-                distance = np.linalg.norm(np.array([cX, cY]) - np.array(previous_detection))
-                score -= distance * 1000
+            # compare to previous detection. penalize distance from previous detections.
+            kill = False
+            for i_ in range(len(recent_detections)):
+                weight = 0.8 ** i_
+                distance = np.linalg.norm(np.array([cX, cY]) - np.array(recent_detections[-i_]))
+                score -= distance * weight * 10
 
             # kill tail end detections
             # if not is_near_previous_detection:
-            kill = (area < 5 or area > 200 or eccentricity > 10 or solidity < 0.2)
+            kill = kill or (area < 25 or area > 200 or eccentricity > 10 or solidity < 0.2)
             if kill:
                 cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
                 continue
@@ -208,8 +240,10 @@ try:
             if DO_PLAYBACK:
                 print(solidity, eccentricity, area, area_penalty, laterality)
 
-            score += solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation - laterality * 100000
+            score += solidity * 10 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation
             contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty, laterality))
+
+        ball_mask_color = cv2.cvtColor(ball_mask, cv2.COLOR_GRAY2BGR)
 
         contours_with_scores.sort(key=lambda x: x[0], reverse=True)
         if len(contours_with_scores) > 0:
@@ -219,6 +253,7 @@ try:
 
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
+            cv2.drawContours(ball_mask_color, [contour], -1, (0, 255, 0), -1)
 
             # draw a bigass circle
             M = cv2.moments(contour)
@@ -233,14 +268,15 @@ try:
                 print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f} {laterality=:.4f}")
 
             detection = (cX, cY)
+            recent_detections.append(detection)
         else:
             detection = None
 
         if detection is not None:
             event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
 
+        cv2.imshow('ball_mask_color', ball_mask_color)
         cv2.imshow('frame', frame)
-        # cv2.imshow('ball_mask', ball_mask)
 
         if cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF == ord('q'):
             break
