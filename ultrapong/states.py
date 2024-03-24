@@ -78,7 +78,9 @@ class MatchState:
     # Transitions current state and returns the new one
     def transition(self, letter):
         key = (self._current_state, letter)
+        print("Transitioning from", self._current_state, "to", self.transitions[key], "because of", letter, "...")
         if key not in self.transitions.keys():
-            input("Current state:", self._current_state, "...")
+            print("Current state:", self._current_state, "...")
+            input()
         self._current_state = self.transitions[key]
         return self._current_state

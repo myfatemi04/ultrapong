@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height):
+def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, previous_pose=None, time_since_previous_pose=None):
     """
     We combine several filters to create final result, and hope that the ball is the only one that matches all of them.
 
@@ -144,9 +144,17 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height):
         area_penalty = (area - mean_area) ** 2 / std_area ** 2
 
         # compare to previous detections (to come soon)
-        
-        kill = (area < 5 or area > 200 or eccentricity > 10 or convexity < 0.2)
-        if kill:
+        certified_dogwater_detection = (area < 5 or area > 200 or eccentricity > 10 or convexity < 0.2)
+
+        if time_since_previous_pose is not None and previous_pose is not None:
+            if time_since_previous_pose < 0.2:
+                distance = np.sqrt((cX - previous_pose[0]) ** 2 + (cY - previous_pose[1]) ** 2)
+                speed = distance / time_since_previous_pose
+                if (speed * 0.1) > 100:
+                    certified_dogwater_detection = True
+                    # print("bad detection!")
+
+        if certified_dogwater_detection:
             cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
             continue
 

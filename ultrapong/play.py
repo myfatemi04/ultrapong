@@ -6,7 +6,6 @@ from collections import deque
 import cv2
 import numpy as np
 from velocities import BallTracker
-import sort
 from detect_ball import detect_ball
 from detect_table import detect_table
 from check_table_side import check_table_side, get_table_points
@@ -36,30 +35,16 @@ def main():
         writer = None
 
     timestamps = deque(maxlen=10)
-    history = deque(maxlen=1)
-
-    bgr_ball = np.array([[[0, 127, 255]]], dtype=np.uint8)
-    hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0] # type: ignore
-    hue_min = hsv_ball[0] - 10
-    hue_max = hsv_ball[0] + 10
 
     circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
     circle = (circle * 2 - 1) / sum(np.abs(circle))
-    # circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
 
-    # define the upper and lower boundaries of the HSV pixel
-    # intensities to be considered 'skin'
-    skin_lower = np.array([0, 48, 80], dtype = "uint8")
-    skin_upper = np.array([20, 255, 255], dtype = "uint8")
-
-    previous_detection = None
     previous_frame = None
 
     min_x = 0.1
     max_x = 0.9
 
-    event_handler = BallTracker(history_length=90, visualize=False)
-    # ball_filter = 
+    ball_tracker = BallTracker(history_length=90, visualize=False)
 
     downsample = 4
 
@@ -71,14 +56,16 @@ def main():
     frame_width = 1920 // downsample
     frame_height = 1080 // downsample
 
-    recent_detections = deque(maxlen=4)
-
-    tracker = sort.Sort()
-
     table_detection = None
 
     match_state = MatchState()
     ball_lost_counter = 0
+
+    # for PLAYBACK mode.
+    artificial_time = 0
+
+    previous_detection = None
+    previous_detection_timestamp = None
 
     counter = 0
     try:
@@ -91,8 +78,11 @@ def main():
             if DO_PLAYBACK and counter < 200:
                 continue
 
+            artificial_time += 0.1
+
             if DO_PLAYBACK:
-                time.sleep(0.1)
+                # time.sleep(0.1)
+                pass
             else:
                 timestamps.append(time.time())
                 if len(timestamps) > 1:
@@ -112,8 +102,14 @@ def main():
                     table_detection = C
             else:
                 # Table has been found!
-                detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height)
+                current_time = time.time() if not DO_PLAYBACK else artificial_time
+                time_since_previous_detection = (current_time - previous_detection_timestamp) if previous_detection_timestamp is not None else None
+                detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height, previous_detection, time_since_previous_detection)
                 previous_frame = raw_frame
+
+                if detection is not None:
+                    previous_detection = detection
+                    previous_detection_timestamp = current_time
 
                 middle_top, middle_bottom = get_table_points(table_detection)
 
@@ -128,10 +124,10 @@ def main():
                         frame[ball_mask > 0, :] = (0, 255, 0)
 
                 if detection is not None:
-                    (x_bounce_left, x_bounce_right, y_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+                    (x_, y_, x_bounce_left, x_bounce_right, y_bounce) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1])
                     x_bounce = x_bounce_left or x_bounce_right
                     result = None
-                    PRINT_RESULTS = False
+                    PRINT_RESULTS = True
                     if y_bounce and ball_side == 0:
                         ball_lost_counter = 0
                         result = match_state.transition("ball_bounced_on_table_1")
@@ -162,6 +158,9 @@ def main():
                             result = match_state("ball_lost")
                             if PRINT_RESULTS:
                                 print("ball_lost")
+
+                    # draw the filtered detection
+                    cv2.circle(frame, (int(x_), int(y_)), 10, (255, 0, 0), 3)
                     
 
                 cv2.imshow('ball_mask_color', ball_mask_color)
