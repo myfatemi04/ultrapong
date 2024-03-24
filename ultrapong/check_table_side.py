@@ -21,7 +21,7 @@ def get_table_points(table_detections):
 
     return middle_top[0], middle_bottom[0]
 
-def check_table_side(middle_top, middle_bottom, x, y):
+def get_net_offset(middle_top, middle_bottom, x, y):
     # middle_top[1] * s + middle_bottom[1] * (1 - s) = y
     # (middle_top[1] - middle_bottom[1]) * s + middle_bottom[1] = y
     s = (y - middle_bottom[1]) / (middle_top[1] - middle_bottom[1])
@@ -29,5 +29,5 @@ def check_table_side(middle_top, middle_bottom, x, y):
     cutoff_x = middle_bottom[0] * s + middle_top[0] * (1 - s)
 
     # 0 left, 1 right
-    return x > cutoff_x
+    return x - cutoff_x
 

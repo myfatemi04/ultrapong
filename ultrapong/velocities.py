@@ -103,7 +103,7 @@ class BallTracker:
         # self.fig.canvas.flush_events()
         plt.pause(0.1)
 
-    def handle_ball_detection(self, t_, x_, y_):
+    def handle_ball_detection(self, t_, x_, y_, valid_ball_bounce_hitbox):
         dt = t_ - self.buf[-1][0] if len(self.buf) > 0 else 0.1
 
         # check distance from previous point. if dt is small and the distance is large, ignore the point
@@ -112,7 +112,7 @@ class BallTracker:
             dist = np.sqrt((prev_x - x_) ** 2 + (prev_y - y_) ** 2)
             if dist > 100 and dt < 0.1:
                 print('ignoring point', x_, y_, 'dt', dt)
-                return x_, y_, False, False, False
+                return x_, y_, False, False, False, None
 
         x_, y_ = self.filter(x_, y_, dt)
 
@@ -128,7 +128,7 @@ class BallTracker:
         y_bounce = False
 
         # bounce detection (vy)
-        if len(self.buf) >= 10:
+        if len(self.buf) >= 3:
             # vx, vy = self.calculate_velocity()
             # if vy[-2] > 0.5 and vy[-1] < -0.1:\
             y = np.array([y for t, x, y in self.buf])
@@ -137,26 +137,29 @@ class BallTracker:
             min_time_between_x_bounces = 0.7
             min_time_between_y_bounces = 0.7
 
-            x_bounce_right = (x[-3] < x[-2] and x[-1] < x[-2])
-            x_bounce_left = (x[-3] > x[-2] and x[-1] > x[-2])
-            if x_bounce_left or x_bounce_right:
+            x_bounce_right_2 = (x[-3] < x[-2] and x[-1] < x[-2])
+            x_bounce_left_2 = (x[-3] > x[-2] and x[-1] > x[-2])
+            if x_bounce_left_2 or x_bounce_right_2:
                 curr_time = t_
                 elapsed = curr_time - self.last_horizontal_bounce
                 if elapsed > min_time_between_x_bounces:
                     self.last_horizontal_bounce = t_
                     print('x bounce detected', t_, 'on', 'left' if x_bounce_left else 'right', 'side')
                     # speak_async("Bounce detected")
-                    x_bounce = True
+
+                    # only one of these can be true at a time
+                    x_bounce_left = x_bounce_left_2
+                    x_bounce_right = x_bounce_right_2
 
             y_bounce_2 = (y[-3] < y[-2] and y[-1] < y[-2])
             x_continued = (x[-3] < x[-2] < x[-1]) or (x[-3] > x[-2] > x[-1])
-            if y_bounce_2 and x_continued:
+
+            if y_bounce_2 and x_continued and valid_ball_bounce_hitbox[y[-2], x[-2]]:
                 curr_time = t_
                 elapsed = curr_time - self.last_vertical_bounce
                 if elapsed > min_time_between_y_bounces:
                     self.last_vertical_bounce = t_
                     print('y bounce detected', t_)
-                    # speak_async("Bounce detected")
                     y_bounce = True
 
-        return x_, y_, x_bounce_left, x_bounce_right, y_bounce
+        return x_, y_, x_bounce_left, x_bounce_right, y_bounce, ((x[-2], y[-2]) if len(self.buf) >= 3 else None)

@@ -1,6 +1,7 @@
 
 class MatchState:
     states = [
+        "standby",
         "start",
         "p1_serves",
         "p1_liable_before_hit", # player 1 liable if the ball is lost of bounces on their side
@@ -13,7 +14,7 @@ class MatchState:
         "reset" # game needs to be reset
     ]
 
-    start_state = "start"
+    start_state = "standby"
 
     final_states = {"p1_loses", "p2_loses", "reset"}
 
@@ -26,10 +27,14 @@ class MatchState:
     ]
 
     transitions = { # (start state, letter) -> new state
+        ("standby", "init"): "start",
+        
+        # if we don't register ball_hit_by_player_1, we just look for ball_bounced_on_table_1
         ("start", "ball_bounced_on_table_1") : "p1_liable_after_hit",
         ("start", "ball_bounced_on_table_2") : "p2_liable_after_hit", # some leniency in detection time
-        ("start", "ball_hit_by_player_1") : "p1_serves",
-        ("start", "ball_hit_by_player_2") : "p2_serves",
+        # avoid false hits
+        ("start", "ball_hit_by_player_1") : "start",
+        ("start", "ball_hit_by_player_2") : "start",
         ("start", "ball_lost") : "reset", # invalid
 
         ("p1_serves", "ball_bounced_on_table_1") : "p1_liable_after_hit",
@@ -80,9 +85,10 @@ class MatchState:
     # Transitions current state and returns the new one
     def transition(self, letter):
         key = (self._current_state, letter)
-        print("Transitioning from", self._current_state, "to", self.transitions[key], "because of", letter, "...")
         if key not in self.transitions.keys():
             print("Current state:", self._current_state, "...")
             input()
-        self._current_state = self.transitions[key]
+        else:
+            print("Transitioning from", self._current_state, "to", self.transitions[key], "because of", letter, "...")
+            self._current_state = self.transitions[key]
         return self._current_state

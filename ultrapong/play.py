@@ -8,8 +8,9 @@ import numpy as np
 from velocities import BallTracker
 from detect_ball import detect_ball
 from detect_table import detect_table
-from check_table_side import check_table_side, get_table_points
+from check_table_side import get_net_offset, get_table_points
 from states import MatchState
+from point_tracker import PointTracker
 
 import os
 
@@ -24,7 +25,7 @@ def main():
 
     if DO_PLAYBACK:
         assert not DO_CAPTURE
-        cap = cv2.VideoCapture("video.mp4")
+        cap = cv2.VideoCapture("video_5.mp4")
     else:
         cap = cv2.VideoCapture(int(sys.argv[1]))
         cap.set(cv2.CAP_PROP_FPS, 60)
@@ -57,9 +58,11 @@ def main():
     frame_height = 1080 // downsample
 
     table_detection = None
+    valid_ball_bounce_hitbox = None
 
     match_state = MatchState()
     ball_lost_counter = 0
+    point_tracker = PointTracker()
 
     # for PLAYBACK mode.
     artificial_time = 0
@@ -75,15 +78,18 @@ def main():
                 break
 
             counter += 1
-            if DO_PLAYBACK and counter < 260:
-                match_state._current_state = "p2_liable_after_hit"
-                continue
+            # if DO_PLAYBACK and counter < 260:
+                # match_state._current_state = "p2_liable_after_hit"
+                # continue
 
             artificial_time += 0.1
 
             if DO_PLAYBACK:
-                if counter < 400:
-                    time.sleep(0.01)
+                if counter < 350:
+                    time.sleep(0)
+                else:
+                    input()
+                    pass
                 pass
             else:
                 timestamps.append(time.time())
@@ -101,13 +107,22 @@ def main():
             if table_detection is None:
                 C, table_mask = detect_table(frame)
                 if C is not None:
+                    kernel = np.ones((5, 5), np.uint8)
+                    valid_ball_bounce_hitbox = np.zeros_like(table_mask)
+                    cv2.drawContours(valid_ball_bounce_hitbox, [C[0], C[1]], -1, 255, -1)
+                    valid_ball_bounce_hitbox = cv2.dilate(valid_ball_bounce_hitbox, kernel, iterations=4)
                     table_detection = C
-            else:
+                    
+            if match_state.current_state() == 'standby':
+                pass
+            elif table_detection is not None:
                 # Table has been found!
                 current_time = time.time() if not DO_PLAYBACK else artificial_time
                 time_since_previous_detection = (current_time - previous_detection_timestamp) if previous_detection_timestamp is not None else None
                 detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height, previous_detection, time_since_previous_detection)
                 previous_frame = raw_frame
+
+                frame[valid_ball_bounce_hitbox > 0, :] = (0, 0, 255)
 
                 if detection is not None:
                     previous_detection = detection
@@ -118,16 +133,19 @@ def main():
                 cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
 
                 if detection is not None:
-                    ball_side = check_table_side(middle_top, middle_bottom, detection[0], detection[1])
+                    net_offset = get_net_offset(middle_top, middle_bottom, detection[0], detection[1])
 
-                    if ball_side: # left
+                    ball_side = 0 if net_offset < 0 else 1
+                    if ball_side == 0: # left
                         frame[ball_mask > 0, :] = (255, 0, 255)
                     else:
                         frame[ball_mask > 0, :] = (0, 255, 0)
 
                 if detection is not None:
-                    (x_, y_, x_bounce_left, x_bounce_right, y_bounce) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1])
+                    (x_, y_, x_bounce_left, x_bounce_right, y_bounce, bounce_location) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1], valid_ball_bounce_hitbox)
                     x_bounce = x_bounce_left or x_bounce_right
+                    if x_bounce:
+                        input()
                     result = None
                     PRINT_RESULTS = True
                     if y_bounce and ball_side == 0:
@@ -148,7 +166,7 @@ def main():
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
-                    elif x_bounce_right and ball_side == 0:
+                    elif x_bounce_right and ball_side == 0 and abs(net_offset) < 20:
                         ball_lost_counter = 0
                         result = match_state.transition("net_hit_by_player_1")
                         if PRINT_RESULTS:
@@ -160,7 +178,7 @@ def main():
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
-                    elif x_bounce_left and ball_side == 1:
+                    elif x_bounce_left and ball_side == 1 and abs(net_offset) < 20:
                         ball_lost_counter = 0
                         result = match_state.transition("net_hit_by_player_2")
                         if PRINT_RESULTS:
@@ -168,10 +186,27 @@ def main():
                             print("RESULT", result)
                     elif detection[1] > middle_bottom[1]:
                         ball_lost_counter += 1
-                        if ball_lost_counter > 90:
-                            result = match_state("ball_lost")
+                        if ball_lost_counter > 20:
+                            result = match_state.transition("ball_lost")
                             if PRINT_RESULTS:
                                 print("ball_lost")
+
+                    s = match_state.current_state()
+                    if "_loses" in s:
+                        print("Someone lost!")
+                        match_state._current_state = "standby"
+
+                        if s == 'p1_loses':
+                            match_outcome = point_tracker.update(2)
+                        elif s == 'p2_loses':
+                            match_outcome = point_tracker.update(1)
+
+                        if match_outcome is not None:
+                            speak_async(f"Player {match_outcome} wins!")
+                            match_state._current_state = "standby"
+                            point_tracker.reset()
+                        else:
+                            speak_async("Player " + str(3 - int(s[1])) + " scored a point!")
 
                     # draw the filtered detection
                     cv2.circle(frame, (int(x_), int(y_)), 10, (255, 0, 0), 3)
