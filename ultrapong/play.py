@@ -92,7 +92,7 @@ def main():
 
             counter += 1
             if DO_PLAYBACK:
-                if counter >= 190:
+                if counter >= 750:
                     input()
             else:
                 timestamps.append(time.time())

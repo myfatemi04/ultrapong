@@ -12,33 +12,9 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
     frame_blurred = cv2.GaussianBlur(frame, (11, 11), 0)
     HSV = cv2.cvtColor(frame_blurred, cv2.COLOR_BGR2HSV)
 
-    # Calculate hue similarity.
-    # hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
-    # hue_difference = hue_difference.astype(np.uint8)
-    # hue = HSV[..., 0].copy()
-    # hue[hue < 20] = 0
-    # hue *= 12
-    # cv2.imshow('hue', hue)
-
-    # calculate saturation mean
-    # window_size = 11
-    # padded = np.pad(HSV[..., 1], window_size // 2, mode='edge')
-    # saturation_mean = np.zeros_like(HSV[..., 1], dtype=float)
-    # saturation_variance = np.zeros_like(HSV[..., 1], dtype=float)
-    # for i in range(window_size):
-    #     for j in range(window_size):
-    #         saturation_mean += padded[i:i+HSV.shape[0], j:j+HSV.shape[1]]
-    #         saturation_variance += padded[i:i+HSV.shape[0], j:j+HSV.shape[1]] ** 2
-
-    # saturation_mean /= float(window_size ** 2)
-    # saturation_variance /= float(window_size ** 2)
-    # # Visualize saturation [normalized]
-    # saturation_normalized = (HSV[..., 1] - saturation_mean) / (saturation_variance ** 0.5 + 1e-6)
-    # cv2.imshow('saturation_normalized', saturation_normalized)
-
     saturation_mask = HSV[..., 1].copy()
-    saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 0, saturation_mask)
-    saturation_mask = saturation_mask & (HSV[..., 1].copy() > 50)
+    saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 5, saturation_mask)
+    saturation_mask = saturation_mask & (HSV[..., 1].copy() > 35)
 
     value_mask = HSV[..., 2] > 40
     # value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
@@ -62,9 +38,9 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
         motion_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
 
     # Check saturation and value masks.
-    # cv2.imshow('saturation_mask', saturation_mask)
-    # cv2.imshow('motion_mask', motion_mask)
-    # cv2.imshow('hue_mask', hue_mask)
+    cv2.imshow('saturation_mask', (saturation_mask * 255).astype(np.uint8))
+    cv2.imshow('motion_mask', motion_mask)
+    cv2.imshow('hue_mask', hue_mask)
 
     ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0) & (value_mask > 0) & (saturation_mask > 0)
     # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)

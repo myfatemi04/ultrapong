@@ -87,7 +87,7 @@ class MatchState:
         key = (self._current_state, letter)
         if key not in self.transitions.keys():
             print("Current state:", self._current_state, "...")
-            input()
+            # input()
         else:
             print("Transitioning from", self._current_state, "to", self.transitions[key], "because of", letter, "...")
             self._current_state = self.transitions[key]

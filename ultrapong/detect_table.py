@@ -13,7 +13,7 @@ def detect_table(frame):
     frame_blurred = cv2.medianBlur(frame, 5)
     table_mask = (
         (frame/255.0 >= (np.array([0.15, 0.15, 0.15]))).all(axis=-1) & 
-        (frame/255.0 <= (np.array([0.5, 0.5, 0.5]))).all(axis=-1) &
+        (frame/255.0 <= (np.array([0.55, 0.5, 0.5]))).all(axis=-1) &
         (frame[..., 2].astype(np.short) - frame[..., 0].astype(np.short) < 15) &
         (frame[..., 2].astype(np.short) - frame[..., 1].astype(np.short) < 15)
         # (frame_blurred[..., 0] > frame_blurred[..., 2] * 0.5)
@@ -25,6 +25,16 @@ def detect_table(frame):
     table_mask_a = cv2.adaptiveThreshold(blurred_frame, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 2)
     # Find table contours
 
+    # table_mask = cv2.dilate(
+    #     table_mask, 
+    #     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    #     iterations=1
+    # )
+    # table_mask = cv2.erode(
+    #     table_mask, 
+    #     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    #     iterations=1
+    # )
     contours, _ = cv2.findContours(table_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     # Filter for large rectangular contours
     max_area = -1
@@ -32,13 +42,14 @@ def detect_table(frame):
     for contour in contours:
         # Approximate the contour to a polygon
         perimeter = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True)
+        approx = cv2.approxPolyDP(contour, 0.04 * perimeter, True)
 
         # Check if the polygon has 4 sides (potential rectangle/table)
         if len(approx) == 4:
-            area = cv2.contourArea(contour)
-            solidity = area / cv2.contourArea(cv2.convexHull(contour))
-            if area > 4000 and solidity > 0.9:
+            area = cv2.contourArea(approx)
+            solidity = area / cv2.contourArea(cv2.convexHull(approx))
+            # print(area, solidity)
+            if area > 1000 and solidity > 0.8:
                 # Draw the contour on the original image
                 proper_contour = contour
                 max_area = area
