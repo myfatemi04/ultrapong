@@ -11,130 +11,142 @@ from detect_ball import detect_ball
 from detect_table import detect_table
 from check_table_side import check_table_side, get_table_points
 
-DO_CAPTURE = False
-DO_PLAYBACK = True
-DO_STEP_BY_STEP = False
+import os
 
-if DO_PLAYBACK:
-    assert not DO_CAPTURE
-    cap = cv2.VideoCapture("video.mp4")
-else:
-    cap = cv2.VideoCapture(int(sys.argv[1]))
-    cap.set(cv2.CAP_PROP_FPS, 60)
+def speak_async(text: str):
+    os.system(f"say '{text}' &")
 
-if DO_CAPTURE:
-    writer = cv2.VideoWriter("video_tmp.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1920, 1080)) # type: ignore
-else:
-    writer = None
+def main():
 
-timestamps = deque(maxlen=10)
-history = deque(maxlen=1)
+    DO_CAPTURE = False
+    DO_PLAYBACK = True
+    DO_STEP_BY_STEP = False
 
-bgr_ball = np.array([[[0, 127, 255]]], dtype=np.uint8)
-hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0] # type: ignore
-hue_min = hsv_ball[0] - 10
-hue_max = hsv_ball[0] + 10
+    if DO_PLAYBACK:
+        assert not DO_CAPTURE
+        cap = cv2.VideoCapture("video.mp4")
+    else:
+        cap = cv2.VideoCapture(int(sys.argv[1]))
+        cap.set(cv2.CAP_PROP_FPS, 60)
 
-circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
-circle = (circle * 2 - 1) / sum(np.abs(circle))
-# circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
+    if DO_CAPTURE:
+        writer = cv2.VideoWriter("video_tmp.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1920, 1080)) # type: ignore
+    else:
+        writer = None
 
-# define the upper and lower boundaries of the HSV pixel
-# intensities to be considered 'skin'
-skin_lower = np.array([0, 48, 80], dtype = "uint8")
-skin_upper = np.array([20, 255, 255], dtype = "uint8")
+    timestamps = deque(maxlen=10)
+    history = deque(maxlen=1)
 
-previous_detection = None
-previous_frame = None
+    bgr_ball = np.array([[[0, 127, 255]]], dtype=np.uint8)
+    hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0] # type: ignore
+    hue_min = hsv_ball[0] - 10
+    hue_max = hsv_ball[0] + 10
 
-min_x = 0.1
-max_x = 0.9
+    circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
+    circle = (circle * 2 - 1) / sum(np.abs(circle))
+    # circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
 
-event_handler = BallTracker(history_length=90, visualize=True)
-# ball_filter = 
+    # define the upper and lower boundaries of the HSV pixel
+    # intensities to be considered 'skin'
+    skin_lower = np.array([0, 48, 80], dtype = "uint8")
+    skin_upper = np.array([20, 255, 255], dtype = "uint8")
 
-downsample = 4
+    previous_detection = None
+    previous_frame = None
 
-roi_mask = (np.ones((1080//downsample, 1920//downsample)) * 255).astype(np.uint8)
-roi_mask[:, :int(min_x * roi_mask.shape[1])] = 0
-roi_mask[:, int(max_x * roi_mask.shape[1]):] = 0
-roi_mask[int(0.8 * roi_mask.shape[0]):, :] = 0
+    min_x = 0.1
+    max_x = 0.9
 
-frame_width = 1920 // downsample
-frame_height = 1080 // downsample
+    event_handler = BallTracker(history_length=90, visualize=False)
+    # ball_filter = 
 
-recent_detections = deque(maxlen=4)
+    downsample = 4
 
-tracker = sort.Sort()
+    roi_mask = (np.ones((1080//downsample, 1920//downsample)) * 255).astype(np.uint8)
+    roi_mask[:, :int(min_x * roi_mask.shape[1])] = 0
+    roi_mask[:, int(max_x * roi_mask.shape[1]):] = 0
+    roi_mask[int(0.8 * roi_mask.shape[0]):, :] = 0
 
-table_detection = None
+    frame_width = 1920 // downsample
+    frame_height = 1080 // downsample
 
-counter = 0
-try:
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    recent_detections = deque(maxlen=4)
 
-        counter += 1
-        if DO_PLAYBACK and counter < 200:
-            continue
+    tracker = sort.Sort()
 
-        if DO_PLAYBACK:
-            time.sleep(0.1)
-        else:
-            timestamps.append(time.time())
-            if len(timestamps) > 1:
-                fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-                # print(f"{fps:.3f}")
+    table_detection = None
 
-        if writer is not None:
-            writer.write(frame)
+    counter = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        # Downsample for faster processing.
-        downsample = 4
-        frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
-        raw_frame = frame.copy()
-        if table_detection is None:
-            C, table_mask = detect_table(frame)
-            if C is not None:
-                table_detection = C
-        else:
-            # Table has been found!
-            detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height)
-            previous_frame = raw_frame
+            counter += 1
+            if DO_PLAYBACK and counter < 200:
+                continue
 
-            middle_top, middle_bottom = get_table_points(table_detection)
+            if DO_PLAYBACK:
+                time.sleep(0.1)
+            else:
+                timestamps.append(time.time())
+                if len(timestamps) > 1:
+                    fps = len(timestamps) / (timestamps[-1] - timestamps[0])
+                    # print(f"{fps:.3f}")
 
-            cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
+            if writer is not None:
+                writer.write(frame)
 
-            if detection is not None:
-                ball_side = check_table_side(middle_top, middle_bottom, detection[0], detection[1])
+            # Downsample for faster processing.
+            downsample = 4
+            frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
+            raw_frame = frame.copy()
+            if table_detection is None:
+                C, table_mask = detect_table(frame)
+                if C is not None:
+                    table_detection = C
+            else:
+                # Table has been found!
+                detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height)
+                previous_frame = raw_frame
 
-                if ball_side: # left
-                    frame[ball_mask > 0, :] = (255, 0, 255)
-                else:
-                    frame[ball_mask > 0, :] = (0, 255, 0)
+                middle_top, middle_bottom = get_table_points(table_detection)
 
-            if detection is not None:
-                (x_bounce_left, x_bounce_right, y_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+                cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
 
-            cv2.imshow('ball_mask_color', ball_mask_color)
+                if detection is not None:
+                    ball_side = check_table_side(middle_top, middle_bottom, detection[0], detection[1])
 
-            # frame[ball_mask > 0] = 255 # type: ignore
-        cv2.imshow('frame', frame)
+                    if ball_side: # left
+                        frame[ball_mask > 0, :] = (255, 0, 255)
+                    else:
+                        frame[ball_mask > 0, :] = (0, 255, 0)
 
-        key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF
-        if key == ord('q'):
-            break
-        elif key == ord('n'):
-            continue
+                if detection is not None:
+                    (x_bounce_left, x_bounce_right, y_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
 
-except KeyboardInterrupt:
-    print("Interrupted.")
+                cv2.imshow('ball_mask_color', ball_mask_color)
 
-if writer is not None:
-    writer.release()
-    print("::: Correcting Video Format :::")
-    os.system("ffmpeg -i video_tmp.mp4 video.mp4")
-    os.system("rm video_tmp.mp4")
+                # frame[ball_mask > 0] = 255 # type: ignore
+            cv2.imshow('frame', frame)
+
+            key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF
+            if key == ord('q'):
+                break
+            elif key == ord('n'):
+                speak_async("new game")
+                continue
+
+    except KeyboardInterrupt:
+        print("Interrupted.")
+
+    if writer is not None:
+        writer.release()
+        print("::: Correcting Video Format :::")
+        os.system("ffmpeg -i video_tmp.mp4 video.mp4")
+        os.system("rm video_tmp.mp4")
+
+
+if __name__ == "__main__":
+    main()
