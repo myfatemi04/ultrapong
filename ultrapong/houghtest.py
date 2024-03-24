@@ -11,7 +11,7 @@ DO_PLAYBACK = True
 
 if DO_PLAYBACK:
     assert not DO_CAPTURE
-    cap = cv2.VideoCapture("video.mp4")
+    cap = cv2.VideoCapture("video_0.mp4")
 else:
     cap = cv2.VideoCapture(int(sys.argv[1]))
     cap.set(cv2.CAP_PROP_FPS, 60)
@@ -29,23 +29,33 @@ hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0]
 hsv_ball_min = np.array([10, 100, 100])
 hsv_ball_max = np.array([40, 255, 255])
 
+circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
+circle = (circle * 2 - 1) / sum(np.abs(circle))
+# circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
+
 previous_detection = None
 
+counter = 0
 try:
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
+        counter += 1
+        if counter < 100:
+            continue
+
         if writer is not None:
             writer.write(frame)
 
-        time.sleep(0.1)
-
-        timestamps.append(time.time())
-        if len(timestamps) > 1:
-            fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-            print(fps)
+        if DO_PLAYBACK:
+            time.sleep(0.1)
+        else:
+            timestamps.append(time.time())
+            if len(timestamps) > 1:
+                fps = len(timestamps) / (timestamps[-1] - timestamps[0])
+                print(fps)
 
         # Downsample for faster processing.
         downsample = 4
@@ -56,8 +66,10 @@ try:
 
         1. Color filter: We search for neon colors - colors with high saturation.
         """
-        target_r = 0.5555
-        target_g = 0.3555
+        target_r = 0.6666
+        target_g = 0.3333
+        # target_r = 0.5555
+        # target_g = 0.3555
         target_b = 1 - target_g - target_r
         A1 = np.array([target_b, target_g, target_r])
         A2 = np.array([target_b, -target_r, target_g])
@@ -71,16 +83,26 @@ try:
         # look for cases where other basis vectors are low
 
         frame_dot[frame_dot < 0] = 0
-        ratio = frame_dot[..., 0] / ((abs(frame_dot[..., 1]) + abs(frame_dot[..., 2])) / 2 + 1)
-        cv2.imshow('ratio', np.minimum(100 * ratio, 255).astype(np.uint8))
+        ratio = frame_dot[..., 0] / (((frame_dot[..., 1]) ** 2 + (frame_dot[..., 2]) ** 2) ** 0.5 + 1e-6)
+        ratio_u8 = np.minimum(100 * ratio, 255).astype(np.uint8)
+        # ratio_u8 = cv2.equalizeHist(ratio_u8)
+        ratio_u8 = cv2.GaussianBlur(ratio_u8, (5, 5), 0)
 
-        high_orangeness = frame_dot[..., 0] > ((frame_dot[..., 1] + frame_dot[..., 2]) * 2)
-        dark = frame.sum(axis=-1) < 100
+        cv2.imshow('ratio_orig', ratio_u8)
+        # calculate an adaptive threshold
+        sanity_check = ratio_u8 > 100
+        adaptive_check = cv2.adaptiveThreshold(ratio_u8, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2)
+        ratio_u8 = cv2.bitwise_and(sanity_check.astype(np.uint8) * 255, adaptive_check)
 
-        cv2.imshow('frame_dot_unfiltered', frame_dot.astype(np.uint8))
+        cv2.imshow('ratio', ratio_u8)
+
+        high_orangeness = ratio_u8 > 200
+        dark = frame.mean(axis=-1) < 50
+
+        # cv2.imshow('frame_dot_unfiltered', frame_dot.astype(np.uint8))
         frame_dot[~high_orangeness | dark] = 0
-        cv2.imshow('frame_dot', frame_dot.astype(np.uint8))
-        cv2.imshow('dark', dark.astype(np.uint8) * 255)
+        # cv2.imshow('frame_dot', frame_dot.astype(np.uint8))
+        # cv2.imshow('dark', dark.astype(np.uint8) * 255)
 
         ball_mask = (frame_dot > 0).any(axis=-1)
         height = ball_mask.shape[0]
@@ -122,8 +144,15 @@ try:
 
             # get area of contour
             area = cv2.contourArea(contour)
-            # get aspect ratio
-            x, y, w, h = cv2.boundingRect(contour)
+
+            # get mask
+            mask = np.zeros_like(ball_mask_u8)
+            cv2.drawContours(mask, [contour], -1, 255, -1)
+            # calculate color score
+            color_score = ratio[mask > 0].mean()
+            
+            # get rotated bounding box
+            ((_x, _y), (w, h), angle) = cv2.minAreaRect(contour)
 
             max_eccentricity = 1.2
             aspect_ratio = float(w) / h
@@ -133,28 +162,62 @@ try:
 
             # Measure likelihood according to area
             min_expected_area = 25
-            max_expected_area = 100
+            max_expected_area = 75
             # Use step function-like filtering
             below_penalty = 5.0
             above_penalty = 1.0
             area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
 
-            # kill tail end detections
-            if not is_near_previous_detection:
-                if area < 10:
-                    continue
-                if area > 500:
-                    continue
-                if eccentricity > 5:
-                    continue
+            print(solidity, eccentricity, area, area_penalty)
+            # input()
 
-            score = (solidity * 0.2 - eccentricity) - area_penalty * 0.1
-            score = -area_penalty * 0.1
-            contours_with_scores.append((score, contour))
+            # kill tail end detections
+            # if not is_near_previous_detection:
+            if area < 5:
+                continue
+            if area > 100:
+                continue
+            if eccentricity > 3:
+                continue
+            if solidity < 0.2:
+                continue
+
+            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + color_score
+            contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty))
+
+        ### Create detection through previous track of ball ###
+        # if previous_detection is not None:
+        #     # create a window around the previous detection
+        #     x, y = previous_detection
+        #     window_size = 50
+        #     window = frame[max(0, y - window_size):min(frame.shape[0], y + window_size), max(0, x - window_size):min(frame.shape[1], x + window_size)]
+        #     window_dot = window @ transform
+        #     window_dot[window_dot < 0] = 0
+        #     window_ratio = window_dot[..., 0] / ((abs(window_dot[..., 1]) + abs(window_dot[..., 2])) / 2 + 1)
+
+        #     cv2.imshow("window_ratio", np.minimum(100 * window_ratio, 255).astype(np.uint8))
+
+        #     positions = np.zeros((2, *window.shape[:-1]))
+        #     positions[0] = np.expand_dims(np.arange(window.shape[0]), 1).repeat(window.shape[1], axis=1)
+        #     positions[1] = np.expand_dims(np.arange(window.shape[1]), 0).repeat(window.shape[0], axis=0)
+        #     x_frame, y_frame = (positions * window_ratio).sum(axis=(1, 2))/window_ratio.sum()
+        #     x_frame = int(x_frame)
+        #     y_frame = int(y_frame)
+
+        #     pos = (x_frame + max(0, x - window_size), y_frame + max(0, y - window_size))
+        #     # draw a circle around the maximum value
+        #     cv2.circle(frame, pos, 20, (255, 255, 0), 5)
+        #     # store the maximum value
+        #     previous_detection = pos
 
         contours_with_scores.sort(key=lambda x: x[0], reverse=True)
         if len(contours_with_scores) > 0:
-            score, contour = contours_with_scores[0]
+            score, contour, *other = contours_with_scores[0]
+
+            solidity, eccentricity, area, area_penalty = other
+
+            print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f}")
+
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
 
