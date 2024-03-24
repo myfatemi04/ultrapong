@@ -14,8 +14,9 @@ class Commentary:
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
 
-    def get_commentary(self, who_scored):
-        self.history.append({"role": "user", "content": f"Player {who_scored} scored."})
+    def get_commentary(self, who_scored, num_hits):
+        hits_str = 'hits' if num_hits != 1 else 'hit'
+        self.history.append({"role": "user", "content": f"Player {who_scored} scored. This rally had {num_hits} {hits_str}."})
         cmpl = I.chat.completions.create(messages=self.history, model='gpt-4-turbo-preview') # type: ignore
         response_text = cmpl.choices[0].message.content
 

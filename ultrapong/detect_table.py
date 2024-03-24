@@ -37,18 +37,19 @@ def detect_table(frame):
         # Check if the polygon has 4 sides (potential rectangle/table)
         if len(approx) == 4:
             area = cv2.contourArea(contour)
-            if area > 3000:  # Assuming the table will have a significant area
+            solidity = area / cv2.contourArea(cv2.convexHull(contour))
+            if area > 4000 and solidity > 0.9:
                 # Draw the contour on the original image
                 proper_contour = contour
                 max_area = area
-                count = 0 
-                for coord in table_mask:
-                    if cv2.pointPolygonTest(contour,(coord[0],coord[1]),True) < 0:
-                        count += 1
-                if count/len(contour) >= 0.8:
-                    potential_contours.append(approx)
-                    # draw the approximation in green color
-                    cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
+                # count = 0 
+                # for coord in table_mask:
+                #     if cv2.pointPolygonTest(contour,(coord[0],coord[1]),True) < 0:
+                #         count += 1
+                # if count/len(contour) >= 0.8:
+                potential_contours.append(approx)
+                # draw the approximation in green color
+                cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
 
     potential_contours.sort(key=cv2.contourArea, reverse=True)
 

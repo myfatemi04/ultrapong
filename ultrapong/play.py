@@ -18,6 +18,11 @@ def speak_sync(text: str):
     os.system(f"say '{text}'")
 
 def speak_async(text: str):
+    if '\'' in text:
+        text = text.replace('\'', '')
+
+    print(text)
+
     os.system(f"say '{text}' &")
 
 def main():
@@ -75,6 +80,8 @@ def main():
     previous_detection_timestamp = None
 
     pos_history = deque(maxlen=5)
+
+    num_hits_this_round = 0
 
     counter = 0
     try:
@@ -175,11 +182,15 @@ def main():
                             print("ball_bounced_on_table_2")
                             print("RESULT", result)
                     elif x_bounce_left and ball_side == 0:
-                        ball_lost_counter = 0
-                        result = match_state.transition("ball_hit_by_player_1")
-                        if PRINT_RESULTS:
-                            print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
-                            print("RESULT", result)
+                        if abs(bounce_net_offset) > 50:
+                            ball_lost_counter = 0
+                            result = match_state.transition("ball_hit_by_player_1")
+                            num_hits_this_round += 1
+                            if PRINT_RESULTS:
+                                print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
+                                print("RESULT", result)
+                        else:
+                            print("Player 1 hit detected, but too close to the net.")
                     elif x_bounce_right and ball_side == 0:
                         if abs(bounce_net_offset) < 20:
                             ball_lost_counter = 0
@@ -190,11 +201,15 @@ def main():
                         else:
                             print("Net hit by player 1, but too far from the net.")
                     elif x_bounce_right and ball_side == 1:
-                        ball_lost_counter = 0
-                        result = match_state.transition("ball_hit_by_player_2")
-                        if PRINT_RESULTS:
-                            print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
-                            print("RESULT", result)
+                        if abs(bounce_net_offset) > 50:
+                            ball_lost_counter = 0
+                            result = match_state.transition("ball_hit_by_player_2")
+                            num_hits_this_round += 1
+                            if PRINT_RESULTS:
+                                print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
+                                print("RESULT", result)
+                        else:
+                            print("Player 2 hit detected, but too close to the net.")
                     elif x_bounce_left and ball_side == 1:
                         if abs(bounce_net_offset) < 20:
                             ball_lost_counter = 0
@@ -215,15 +230,23 @@ def main():
                     if "_loses" in s:
                         pause = True
                         print("Someone lost!")
-                        match_state._current_state = "standby"
+                        match_state._current_state = "start"
 
                         comms = ""
                         if s == 'p1_loses':
                             match_outcome = point_tracker.update(2)
-                            comms = commentary.get_commentary(2)
+                            if not DO_PLAYBACK:
+                                comms = commentary.get_commentary(2, num_hits_this_round)
+                            else:
+                                comms = f"Player 2 scored."
                         elif s == 'p2_loses':
                             match_outcome = point_tracker.update(1)
-                            comms = commentary.get_commentary(1)
+                            if not DO_PLAYBACK:
+                                comms = commentary.get_commentary(1, num_hits_this_round)
+                            else:
+                                comms = f"Player 1 scored."
+
+                        num_hits_this_round = 0
 
                         if match_outcome is not None:
                             comms += f" Player {match_outcome} wins!"
