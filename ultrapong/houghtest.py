@@ -9,7 +9,7 @@ from velocities import VelocityClassifier
 import sort
 
 DO_CAPTURE = False
-DO_PLAYBACK = True
+DO_PLAYBACK = False
 DO_STEP_BY_STEP = False
 
 if DO_PLAYBACK:
@@ -47,7 +47,7 @@ previous_frame = None
 min_x = 0.1
 max_x = 0.9
 
-event_handler = VelocityClassifier(history_length=90, visualize=False)
+event_handler = VelocityClassifier(history_length=90, visualize=True)
 # ball_filter = 
 
 downsample = 4
@@ -99,7 +99,7 @@ try:
 
         frame_blurred = cv2.GaussianBlur(frame, (11, 11), 0)
         HSV = cv2.cvtColor(frame_blurred, cv2.COLOR_BGR2HSV)
-        
+
         # Calculate hue similarity.
         # hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
         # hue_difference = hue_difference.astype(np.uint8)
@@ -130,9 +130,7 @@ try:
         value_mask = HSV[..., 2].copy()
         value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
 
-        hue_mask = ((10 < HSV[..., 0]) & (HSV[..., 0] < 40)).astype(np.uint8) * 255
-
-        # value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
+        hue_mask = ((40 < HSV[..., 0]) & (HSV[..., 0] < 80)).astype(np.uint8) * 255
 
         # skin_mask = cv2.inRange(HSV, skin_lower, skin_upper)
 
@@ -151,11 +149,12 @@ try:
         previous_frame = raw_frame
 
         # Check saturation and value masks.
-        # cv2.imshow('saturation_mask', saturation_mask)
-        # cv2.imshow('skin_mask', skin_mask)
-        # cv2.imshow('motion_mask', motion_mask)
+        cv2.imshow('saturation_mask', saturation_mask)
+        cv2.imshow('motion_mask', motion_mask)
+        cv2.imshow('hue_mask', hue_mask)
 
-        ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+        ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+        # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
         ball_mask = ball_mask.astype(np.uint8) * 255
 
         # Erode and dilate.
@@ -210,17 +209,12 @@ try:
             aspect_ratio = float(w) / h
             eccentricity = max(aspect_ratio, 1/aspect_ratio)
 
-            solidity = area / cv2.contourArea(cv2.convexHull(contour))
-
-            # Measure likelihood according to area
-            min_expected_area = 25
-            max_expected_area = 75
-            # Use step function-like filtering
-            below_penalty = 5.0
-            above_penalty = 1.0
-            area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
-
-            score = 0
+            """
+            Comprehensive Scoring Framework:
+             * Centrality: prior distribution for ball location represented as Gaussian
+             * Solidity: represents convexity of the contour
+             * Area: represented as a Gaussian
+            """
 
             # compare to prior distribution
             cx_mean = 0.5 * frame_width
@@ -229,30 +223,30 @@ try:
             cy_std = 0.1 * frame_height
             cx_penalty = (cX - cx_mean) ** 2 / cx_std ** 2
             cy_penalty = (cY - cy_mean) ** 2 / cy_std ** 2
-            score -= (cx_penalty + cy_penalty) * 25
-            
-            # compare to previous detection. penalize distance from previous detections.
-            kill = False
-            # for i_ in range(len(recent_detections)):
-            #     weight = 0.8 ** i_
-            #     distance = np.linalg.norm(np.array([cX, cY]) - np.array(recent_detections[-i_]))
-            #     score -= distance * weight * 10
+            prior_distribution_penalty = (cx_penalty + cy_penalty)
 
-            # kill tail end detections
-            # if not is_near_previous_detection:
-            kill = kill or (area < 20 or area > 200 or eccentricity > 10 or solidity < 0.2)
+            # compare convexity
+            convexity = area / cv2.contourArea(cv2.convexHull(contour))
+
+            # compare area
+            mean_area = 20
+            std_area = 2
+            area_penalty = (area - mean_area) ** 2 / std_area ** 2
+
+            # compare to previous detections (to come soon)
+            
+            kill = (area < 10 or area > 200 or eccentricity > 10 or convexity < 0.2)
             if kill:
                 cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
                 continue
 
-            target_x = (1920 // downsample) / 2
-            laterality = ((target_x - int(cX)) / target_x) ** 2
-
             # if DO_PLAYBACK:
             #     print(solidity, eccentricity, area, area_penalty, laterality)
 
-            score += solidity * 10 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation
-            contours_with_scores.append((score, contour, (x1, x2, y1, y2), solidity, eccentricity, area, area_penalty, laterality))
+            score = 0
+            score += (convexity - 0.8) - area_penalty - prior_distribution_penalty
+
+            contours_with_scores.append((score, contour, (x1, x2, y1, y2), convexity, eccentricity, area, area_penalty))
 
         ball_mask_color = cv2.cvtColor(ball_mask, cv2.COLOR_GRAY2BGR)
 
@@ -269,7 +263,7 @@ try:
 
             score, contour, *other = contours_with_scores[0]
 
-            bbox, solidity, eccentricity, area, area_penalty, laterality = other
+            bbox, convexity, eccentricity, area, area_penalty = other
 
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
@@ -285,7 +279,7 @@ try:
             previous_detection = (cX, cY)
 
             if DO_PLAYBACK:
-                print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f} {laterality=:.4f}")
+                print(f"{score=:.4f} {convexity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f}")
 
             detection = (cX, cY)
             recent_detections.append(detection)
