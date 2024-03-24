@@ -24,10 +24,11 @@ else:
 timestamps = deque(maxlen=10)
 history = deque(maxlen=1)
 
-bgr_ball = np.uint8([[[0, 127, 255]]])
-hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0]
-hsv_ball_min = np.array([10, 100, 100])
-hsv_ball_max = np.array([40, 255, 255])
+bgr_ball = np.array([[[0, 127, 255]]], dtype=np.uint8)
+hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0] # type: ignore
+print(hsv_ball)
+hue_min = hsv_ball[0] - 10
+hue_max = hsv_ball[0] + 10
 
 circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
 circle = (circle * 2 - 1) / sum(np.abs(circle))
@@ -66,84 +67,41 @@ try:
 
         1. High Saturation OR Orange
         """
-        target_r = 0.6666
-        target_g = 0.3333
-        # target_r = 0.5555
-        # target_g = 0.3555
-        target_b = 1 - target_g - target_r
-        A1 = np.array([target_b, target_g, target_r])
-        A2 = np.array([target_b, -target_r, target_g])
-        
-        transform = np.array([
-            A1,
-            A2,
-            np.cross(A1, A2),
-        ])
-        frame_dot = frame @ transform
-        # look for cases where other basis vectors are low
 
-        frame_dot[frame_dot < 0] = 0
-        ratio = frame_dot[..., 0] / (np.linalg.norm(frame_dot, axis=-1) + 1e-6)
-        ratio_u8 = np.minimum(100 * ratio, 255).astype(np.uint8)
-        # ratio_u8 = cv2.equalizeHist(ratio_u8)
-        ratio_u8 = cv2.GaussianBlur(ratio_u8, (5, 5), 0)
+        frame_blurred = cv2.GaussianBlur(frame, (11, 11), 0)
+        HSV = cv2.cvtColor(frame_blurred, cv2.COLOR_BGR2HSV)
+        # Calculate hue similarity.
+        hue_difference = np.minimum(np.abs(HSV[..., 0].astype(np.int8) - hsv_ball[0]), np.abs((HSV[..., 0] - 255).astype(np.int8) - hsv_ball[0]))
+        # Calculate the brightness.
+        brightness = HSV[..., 2]
 
-        cv2.imshow('ratio_orig', ratio_u8)
+        hue_difference = hue_difference.astype(np.uint8)
 
-        # ratio_u8_normalized = ratio_u8[:]
+        print(HSV[..., 0])
+        print(hue_difference)
 
-        # normalize locally
-        # norm_size = 10
-        # for start_x in range(0, ratio_u8.shape[0], norm_size):
-        #     for start_y in range(0, ratio_u8.shape[1], norm_size):
-        #         block = ratio_u8[start_x:start_x + norm_size, start_y:start_y + norm_size]
-        #         block_orig = block.copy()
-        #         block_mean = block.mean()
-        #         block_std = block.std()
-        #         block = (block - block_mean) / max(1, block_std)
-        #         block = np.clip(block, -1, 1)
-        #         block = (block + 1) * 127.5
-        #         block_merged = (block * 0.5 + block_orig * 0.5)
-        #         ratio_u8_normalized[start_x:start_x + norm_size, start_y:start_y + norm_size] = block_merged.astype(np.uint8)
-        # cv2.imshow('ratio_normalized', ratio_u8_normalized)
+        # cv2.imshow('hue_difference', hue_difference)
+        # cv2.imshow('brightness', brightness)
+        cv2.imshow('saturation', HSV[..., 1])
 
-        # calculate an adaptive threshold
-        sanity_check = ratio_u8 > 100
-        BLOCK_SIZE = 25
-        adaptive_check = cv2.adaptiveThreshold(ratio_u8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, BLOCK_SIZE, -2)
-        ratio_u8 = cv2.bitwise_and(sanity_check.astype(np.uint8) * 255, adaptive_check)
+        saturation_mask = HSV[..., 1].copy()
+        saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
 
-        high_orangeness = ratio_u8 > 200
-        dark = frame.mean(axis=-1) < 50
+        value_mask = HSV[..., 2].copy()
+        value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
 
-        # cv2.imshow('frame_dot_unfiltered', frame_dot.astype(np.uint8))
-        frame_dot[~high_orangeness | dark] = 0
-        # cv2.imshow('frame_dot', frame_dot.astype(np.uint8))
-        # cv2.imshow('dark', dark.astype(np.uint8) * 255)
+        ball_mask = cv2.bitwise_and(saturation_mask, value_mask)
 
-        ball_mask = (frame_dot > 0).any(axis=-1)
-        height = ball_mask.shape[0]
-        # Mask out anything below a certain height
-        ball_mask[int(height * 0.9):, :] = 0
-        ball_mask_u8 = (ball_mask * 255).astype(np.uint8)
-        # Find ball contours
-        # Erode and dilate
-        erode_size = 3
-        # kernel = np.ones((erode_size, erode_size), np.uint8)
-        # kernel = np.array([
-        #     [0, 1, 0],
-        #     [1, 1, 1],
-        #     [0, 1, 0],
-        # ], np.uint8)
-        # ball_mask_u8 = cv2.erode(ball_mask_u8, kernel, iterations=1)
-        # ball_mask_u8 = cv2.dilate(ball_mask_u8, kernel, iterations=1)
+        cv2.imshow('ball_mask', ball_mask)
 
-        history.append(ball_mask_u8)
+        #### Select region of interest ####
+
+        history.append(ball_mask)
 
         for historical_mask in history:
             frame[historical_mask > 0, ...] = 255
 
-        ball_contours, _ = cv2.findContours(ball_mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        ball_contours, _ = cv2.findContours(ball_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contours_with_scores = []
         for contour in ball_contours:
             # find center
@@ -163,10 +121,8 @@ try:
             area = cv2.contourArea(contour)
 
             # get mask
-            mask = np.zeros_like(ball_mask_u8)
-            cv2.drawContours(mask, [contour], -1, 255, -1)
-            # calculate color score
-            color_score = ratio[mask > 0].mean()
+            # mask = np.zeros_like(ball_mask)
+            # cv2.drawContours(mask, [contour], -1, 255, -1)
             
             # get rotated bounding box
             ((_x, _y), (w, h), angle) = cv2.minAreaRect(contour)
@@ -198,7 +154,7 @@ try:
             if solidity < 0.2:
                 continue
 
-            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + color_score
+            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1
             contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty))
 
         ### Create detection through previous track of ball ###
