@@ -11,7 +11,7 @@ DO_PLAYBACK = True
 
 if DO_PLAYBACK:
     assert not DO_CAPTURE
-    cap = cv2.VideoCapture("video.mp4")
+    cap = cv2.VideoCapture("video_0.mp4")
 else:
     cap = cv2.VideoCapture(int(sys.argv[1]))
     cap.set(cv2.CAP_PROP_FPS, 60)
@@ -35,6 +35,7 @@ circle = (circle * 2 - 1) / sum(np.abs(circle))
 # circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
 
 previous_detection = None
+previous_frame = None
 
 counter = 0
 try:
@@ -61,6 +62,7 @@ try:
         # Downsample for faster processing.
         downsample = 4
         frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
+        raw_frame = frame.copy()
 
         """
         We combine several filters to create final result, and hope that the ball is the only one that matches all of them.
@@ -77,20 +79,38 @@ try:
 
         hue_difference = hue_difference.astype(np.uint8)
 
-        print(HSV[..., 0])
-        print(hue_difference)
-
-        # cv2.imshow('hue_difference', hue_difference)
-        # cv2.imshow('brightness', brightness)
-        cv2.imshow('saturation', HSV[..., 1])
-
         saturation_mask = HSV[..., 1].copy()
         saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
 
         value_mask = HSV[..., 2].copy()
         value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
 
-        ball_mask = cv2.bitwise_and(saturation_mask, value_mask)
+        # Create a motion mask.
+        if previous_frame is not None:
+            raw_frame_blurry = cv2.GaussianBlur(raw_frame, (11, 11), 0)
+            previous_frame_blurry = cv2.GaussianBlur(previous_frame, (11, 11), 0)
+            motion_magnitude = np.sqrt(((raw_frame_blurry.astype(int) - previous_frame_blurry.astype(int)) ** 2).sum(axis=-1)).astype(np.uint8)
+            # Dilate.
+            motion_mask_dilate_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            motion_magnitude = cv2.dilate(motion_magnitude, motion_mask_dilate_kernel, iterations=1)
+            motion_mask_cutoff = 25
+            motion_mask = (motion_magnitude > motion_mask_cutoff).astype(np.uint8) * 255
+        else:
+            motion_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        previous_frame = raw_frame
+
+        # Check saturation and value masks.
+        cv2.imshow('saturation_mask', saturation_mask)
+        cv2.imshow('value_mask', value_mask)
+        cv2.imshow('motion_mask', motion_mask)
+
+        ball_mask = cv2.bitwise_and(saturation_mask, motion_mask)
+        # ball_mask = cv2.bitwise_and(cv2.bitwise_and(saturation_mask, value_mask), motion_mask)
+
+        # Erode and dilate.
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        ball_mask = cv2.erode(ball_mask, kernel, iterations=1)
+        ball_mask = cv2.dilate(ball_mask, kernel, iterations=1)
 
         cv2.imshow('ball_mask', ball_mask)
 
