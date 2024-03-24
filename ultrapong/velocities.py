@@ -128,7 +128,7 @@ class BallTracker:
         y_bounce = False
 
         # bounce detection (vy)
-        if len(self.buf) >= 3:
+        if len(self.buf) >= 4:
             # vx, vy = self.calculate_velocity()
             # if vy[-2] > 0.5 and vy[-1] < -0.1:\
             y = np.array([y for t, x, y in self.buf])
@@ -136,11 +136,11 @@ class BallTracker:
             # y_smooth = np.convolve(y, np.ones(3) / 3, mode='same').astype(int)
             # y = y_smooth
 
-            min_time_between_x_bounces = 0.7
-            min_time_between_y_bounces = 0.7
+            min_time_between_x_bounces = 0.3
+            min_time_between_y_bounces = 0.3
 
-            x_bounce_right_2 = (x[-3] < x[-2] and x[-1] < x[-2])
-            x_bounce_left_2 = (x[-3] > x[-2] and x[-1] > x[-2])
+            x_bounce_right_2 = ((x[-3] < x[-2]) or (x[-4] < x[-2])) and (x[-1] < x[-2])
+            x_bounce_left_2 = ((x[-3] > x[-2]) or (x[-4] > x[-2])) and (x[-1] > x[-2])
             if x_bounce_left_2 or x_bounce_right_2:
                 curr_time = t_
                 elapsed = curr_time - self.last_horizontal_bounce
@@ -153,7 +153,7 @@ class BallTracker:
                     x_bounce_left = x_bounce_left_2
                     x_bounce_right = x_bounce_right_2
 
-            y_bounce_2 = (y[-3] < y[-2] and y[-1] < y[-2])
+            y_bounce_2 = ((y[-3] < y[-2]) or (y[-4] < y[-2])) and (y[-1] < y[-2])
             x_continued = (x[-3] < x[-2] < x[-1]) or (x[-3] > x[-2] > x[-1])
 
             if y_bounce_2 and x_continued and valid_ball_bounce_hitbox[y[-2], x[-2]]:
@@ -167,4 +167,4 @@ class BallTracker:
 
                     y_bounce = True
 
-        return x_, y_, x_bounce_left, x_bounce_right, y_bounce, ((x[-2], y[-2]) if len(self.buf) >= 3 else None)
+        return x_, y_, x_bounce_left, x_bounce_right, y_bounce, ((x[-2], y[-2]) if len(self.buf) >= 4 else None)

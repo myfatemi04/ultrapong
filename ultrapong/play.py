@@ -92,7 +92,7 @@ def main():
 
             counter += 1
             if DO_PLAYBACK:
-                if counter >= 100:
+                if counter >= 190:
                     input()
             else:
                 timestamps.append(time.time())
@@ -242,16 +242,18 @@ def main():
                     comms = ""
                     if s == 'p1_loses':
                         match_outcome = point_tracker.update(2)
-                        # if not DO_PLAYBACK:
-                        #     comms = commentary.get_commentary(2, num_hits_this_round)
-                        # else:
-                        comms = f"Player 2 scored."
+                        speak_async(f"Player 2 scored.")
+                        if not DO_PLAYBACK:
+                            speak_async(
+                                commentary.get_commentary(2, num_hits_this_round)
+                            )
                     elif s == 'p2_loses':
                         match_outcome = point_tracker.update(1)
-                        # if not DO_PLAYBACK:
-                        #     comms = commentary.get_commentary(1, num_hits_this_round)
-                        # else:
-                        comms = f"Player 1 scored."
+                        speak_async(f"Player 1 scored.")
+                        if not DO_PLAYBACK:
+                            speak_async(
+                                commentary.get_commentary(1, num_hits_this_round)
+                            )
 
                     num_hits_this_round = 0
 
