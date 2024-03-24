@@ -37,7 +37,7 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
     # cv2.imshow('saturation_normalized', saturation_normalized)
 
     saturation_mask = HSV[..., 1].copy()
-    saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
+    saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 0, saturation_mask)
 
     value_mask = HSV[..., 2] > 40
     # value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
@@ -65,7 +65,7 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height, 
     # cv2.imshow('motion_mask', motion_mask)
     # cv2.imshow('hue_mask', hue_mask)
 
-    ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0) & (value_mask > 0)
+    ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0) & (value_mask > 0) & (saturation_mask > 0)
     # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
     # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
     ball_mask = ball_mask.astype(np.uint8) * 255

@@ -37,7 +37,7 @@ def detect_table(frame):
         # Check if the polygon has 4 sides (potential rectangle/table)
         if len(approx) == 4:
             area = cv2.contourArea(contour)
-            if area > 1000:  # Assuming the table will have a significant area
+            if area > 3000:  # Assuming the table will have a significant area
                 # Draw the contour on the original image
                 proper_contour = contour
                 max_area = area

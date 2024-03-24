@@ -20,12 +20,12 @@ def speak_async(text: str):
 def main():
 
     DO_CAPTURE = False
-    DO_PLAYBACK = False
+    DO_PLAYBACK = True
     DO_STEP_BY_STEP = False
 
     if DO_PLAYBACK:
         assert not DO_CAPTURE
-        cap = cv2.VideoCapture("video_5.mp4")
+        cap = cv2.VideoCapture("video.mp4")
     else:
         cap = cv2.VideoCapture(int(sys.argv[1]))
         cap.set(cv2.CAP_PROP_FPS, 60)
@@ -70,6 +70,8 @@ def main():
     previous_detection = None
     previous_detection_timestamp = None
 
+    pos_history = deque(maxlen=5)
+
     counter = 0
     try:
         while True:
@@ -77,15 +79,11 @@ def main():
             if not ret:
                 break
 
-            counter += 1
-            # if DO_PLAYBACK and counter < 260:
-                # match_state._current_state = "p2_liable_after_hit"
-                # continue
-
             artificial_time += 0.1
 
+            counter += 1
             if DO_PLAYBACK:
-                if counter >= 250:
+                if counter >= 100:
                     input()
             else:
                 timestamps.append(time.time())
@@ -106,7 +104,7 @@ def main():
                     kernel = np.ones((5, 5), np.uint8)
                     valid_ball_bounce_hitbox = np.zeros_like(table_mask)
                     cv2.drawContours(valid_ball_bounce_hitbox, [C[0], C[1]], -1, 255, -1)
-                    valid_ball_bounce_hitbox = cv2.dilate(valid_ball_bounce_hitbox, kernel, iterations=4)
+                    valid_ball_bounce_hitbox = cv2.dilate(valid_ball_bounce_hitbox, kernel, iterations=10)
                     table_detection = C
                     
             pause = False
@@ -125,12 +123,17 @@ def main():
 
                 frame[ball_mask > 0] = 255
 
+                pos_history.append(detection)
                 if detection is not None:
-                    cv2.circle(frame, (detection[0], detection[1]), 20, (0, 255, 255), 5)
+                    for pos in pos_history:
+                        if pos is not None:
+                            cv2.circle(frame, (pos[0], pos[1]), 10, (0, 255, 0), 2)
+                    # cv2.circle(frame, (detection[0], detection[1]), 20, (0, 255, 255), 5)
                     previous_detection = detection
                     previous_detection_timestamp = current_time
 
                 cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
+                cv2.drawContours(frame, [C[0], C[1]], -1, 255, 4)
 
                 if detection is not None:
                     net_offset = get_net_offset(middle_top, middle_bottom, detection[0], detection[1])
@@ -145,9 +148,13 @@ def main():
                     (x_, y_, x_bounce_left, x_bounce_right, y_bounce, bounce_location) = ball_tracker.handle_ball_detection(current_time, detection[0], detection[1], valid_ball_bounce_hitbox)
                     pause = x_bounce_left or x_bounce_right
                     
-                    print(x_bounce_left, x_bounce_right, y_bounce, bounce_location, ball_side)
+                    if DO_PLAYBACK:
+                        print(x_bounce_left, x_bounce_right, y_bounce, bounce_location, ball_side)
                     if bounce_location is not None:
                         bounce_net_offset = get_net_offset(middle_top, middle_bottom, bounce_location[0], bounce_location[1])
+
+                    if y_bounce:
+                        pause = True
 
                     result = None
                     PRINT_RESULTS = True
@@ -222,7 +229,7 @@ def main():
                     cv2.circle(frame, (int(x_), int(y_)), 10, (255, 0, 0), 3)
                     
 
-                cv2.imshow('ball_mask_color', ball_mask_color)
+                # cv2.imshow('ball_mask_color', ball_mask_color)
 
                 # frame[ball_mask > 0] = 255 # type: ignore
             cv2.imshow('frame', frame)

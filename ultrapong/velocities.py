@@ -133,6 +133,8 @@ class BallTracker:
             # if vy[-2] > 0.5 and vy[-1] < -0.1:\
             y = np.array([y for t, x, y in self.buf])
             x = np.array([x for t, x, y in self.buf])
+            y_smooth = np.convolve(y, np.ones(3) / 3, mode='same').astype(int)
+            y = y_smooth
 
             min_time_between_x_bounces = 0.7
             min_time_between_y_bounces = 0.7
