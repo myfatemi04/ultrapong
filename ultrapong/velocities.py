@@ -16,7 +16,8 @@ class VelocityClassifier:
         self.history_length = history_length
         self.visualize = visualize
         self.buf = deque(maxlen=self.history_length)
-        self.last_bounce = 0
+        self.last_vertical_bounce = 0
+        self.last_horizontal_bounce = 0
         self.counter = 0
 
         if visualize:
@@ -128,10 +129,26 @@ class VelocityClassifier:
             # vx, vy = self.calculate_velocity()
             # if vy[-2] > 0.5 and vy[-1] < -0.1:\
             y = np.array([y for t, x, y in self.buf])
-            if y[-3] < y[-2] and y[-1] < y[-2]:
+            x = np.array([x for t, x, y in self.buf])
+
+            min_time_between_x_bounces = 0.7
+            min_time_between_y_bounces = 0.7
+
+            x_bounce = (x[-3] < x[-2] and x[-1] < x[-2])
+            if x_bounce:
                 curr_time = time.time()
-                dt = curr_time - self.last_bounce
-                if dt > 0.7:
-                    self.last_bounce = time.time()
-                    print('Bounce detected', time.time())
+                dt = curr_time - self.last_horizontal_bounce
+                if dt > min_time_between_x_bounces:
+                    self.last_horizontal_bounce = time.time()
+                    print('x bounce detected', time.time())
+                    # speak_async("Bounce detected")
+
+            y_bounce = (y[-3] < y[-2] and y[-1] < y[-2])
+            x_continued = (x[-3] < x[-2] < x[-1]) and (x[-3] > x[-2] > x[-1])
+            if y_bounce and x_continued:
+                curr_time = time.time()
+                dt = curr_time - self.last_vertical_bounce
+                if dt > min_time_between_y_bounces:
+                    self.last_vertical_bounce = time.time()
+                    print('y bounce detected', time.time())
                     # speak_async("Bounce detected")
