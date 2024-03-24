@@ -1,16 +1,23 @@
 from collections import deque
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 # from scipy.signal import butter, filtfilt
 
+import os
+
+def speak_async(text: str):
+    os.system(f"say '{text}' &")
 
 class VelocityClassifier:
     def __init__(self, history_length=128, visualize=False):
         self.history_length = history_length
         self.visualize = visualize
         self.buf = deque(maxlen=self.history_length)
+        self.last_bounce = 0
+        self.counter = 0
 
         if visualize:
             self.counter = 0
@@ -98,8 +105,8 @@ class VelocityClassifier:
             self.axes['vy'].cla()
             self.axes['vx'].set_title('vx')
             self.axes['vy'].set_title('vy')
-            self.axes['vx'].set_ylim(-40, 40)
-            self.axes['vy'].set_ylim(-40, 40)
+            self.axes['vx'].set_ylim(-1, 1)
+            self.axes['vy'].set_ylim(-1, 1)
             self.axes['vx'].plot(t[1:], vx)
             self.axes['vy'].plot(t[1:], vy)
 
@@ -107,10 +114,24 @@ class VelocityClassifier:
         # self.fig.canvas.flush_events()
         plt.pause(0.01)
 
-    def handle_ball_detection(self, t, x, y):
-        self.buf.append((t, x, y))
+    def handle_ball_detection(self, t_, x_, y_):
+        self.buf.append((t_, x_, y_))
+        self.counter += 1
 
         if self.visualize:
-            self.counter += 1
-            if self.counter % self.history_length == 0:
+            show_every = 10
+            if self.counter % show_every == 0:
                 self.visualize_history()
+
+        # bounce detection (vy)
+        if len(self.buf) >= 10:
+            # vx, vy = self.calculate_velocity()
+            # if vy[-2] > 0.5 and vy[-1] < -0.1:\
+            y = np.array([y for t, x, y in self.buf])
+            if y[-3] < y[-2] and y[-1] < y[-2]:
+                curr_time = time.time()
+                dt = curr_time - self.last_bounce
+                if dt > 0.7:
+                    self.last_bounce = time.time()
+                    print('Bounce detected', time.time())
+                    # speak_async("Bounce detected")

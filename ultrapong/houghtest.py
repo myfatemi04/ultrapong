@@ -9,7 +9,7 @@ from velocities import VelocityClassifier
 import sort
 
 DO_CAPTURE = False
-DO_PLAYBACK = False
+DO_PLAYBACK = True
 DO_STEP_BY_STEP = False
 
 if DO_PLAYBACK:
@@ -84,7 +84,7 @@ try:
             timestamps.append(time.time())
             if len(timestamps) > 1:
                 fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-                print(f"{fps:.3f}")
+                # print(f"{fps:.3f}")
 
         # Downsample for faster processing.
         downsample = 4
@@ -130,7 +130,8 @@ try:
         value_mask = HSV[..., 2].copy()
         value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
 
-        hue_mask = ((40 < HSV[..., 0]) & (HSV[..., 0] < 80)).astype(np.uint8) * 255
+        hue_mask = ((30 < HSV[..., 0]) & (HSV[..., 0] < 100)).astype(np.uint8) * 255
+        # hue_mask = (frame_blurred[..., 1] > (frame_blurred[..., 0] + frame_blurred[..., 2])).astype(np.uint8) * 255
 
         # skin_mask = cv2.inRange(HSV, skin_lower, skin_upper)
 
@@ -153,7 +154,8 @@ try:
         cv2.imshow('motion_mask', motion_mask)
         cv2.imshow('hue_mask', hue_mask)
 
-        ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+        ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+        # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
         # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
         ball_mask = ball_mask.astype(np.uint8) * 255
 
@@ -253,7 +255,7 @@ try:
         contours_with_scores.sort(key=lambda x: x[0], reverse=True)
 
         if len(contours_with_scores) > 0:
-            print("Providing", len(contours_with_scores), "detections.")
+            # print("Providing", len(contours_with_scores), "detections.")
             # object_ids = tracker.update(np.array([
             #     # x1, y1, x2, y2, score
             #     np.array([*bbox, 1.0])
