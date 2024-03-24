@@ -200,9 +200,9 @@ def main():
                                 print("RESULT", result)
                         else:
                             print("Net hit by player 2, but too far from the net.")
-                    elif detection[1] > middle_bottom[1]:
+                    else:
                         ball_lost_counter += 1
-                        if ball_lost_counter > 20:
+                        if ball_lost_counter > 90: # if no other action is detected for 3 seconds
                             result = match_state.transition("ball_lost")
                             if PRINT_RESULTS:
                                 print("ball_lost")
