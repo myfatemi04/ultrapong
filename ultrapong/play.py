@@ -10,6 +10,7 @@ import sort
 from detect_ball import detect_ball
 from detect_table import detect_table
 from check_table_side import check_table_side, get_table_points
+from states import MatchState
 
 import os
 
@@ -76,6 +77,9 @@ def main():
 
     table_detection = None
 
+    match_state = MatchState()
+    ball_lost_counter = 0
+
     counter = 0
     try:
         while True:
@@ -125,6 +129,40 @@ def main():
 
                 if detection is not None:
                     (x_bounce_left, x_bounce_right, y_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+                    x_bounce = x_bounce_left or x_bounce_right
+                    result = None
+                    PRINT_RESULTS = False
+                    if y_bounce and ball_side == 0:
+                        ball_lost_counter = 0
+                        result = match_state.transition("ball_bounced_on_table_1")
+                        if PRINT_RESULTS:
+                            print("ball_bounced_on_table_1")
+                            print("RESULT", result)
+                    elif y_bounce and ball_side == 1:
+                        ball_lost_counter = 0
+                        result = match_state.transition("ball_bounced_on_table_2")
+                        if PRINT_RESULTS:
+                            print("ball_bounced_on_table_2")
+                            print("RESULT", result)
+                    elif x_bounce and ball_side == 0:
+                        ball_lost_counter = 0
+                        result = match_state.transition("ball_hit_by_player_1")
+                        if PRINT_RESULTS:
+                            print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
+                            print("RESULT", result)
+                    elif x_bounce and ball_side == 1:
+                        ball_lost_counter = 0
+                        result = match_state.transition("ball_hit_by_player_2")
+                        if PRINT_RESULTS:
+                            print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
+                            print("RESULT", result)
+                    elif detection[1] > middle_bottom[1]:
+                        ball_lost_counter += 1
+                        if ball_lost_counter > 90:
+                            result = match_state("ball_lost")
+                            if PRINT_RESULTS:
+                                print("ball_lost")
+                    
 
                 cv2.imshow('ball_mask_color', ball_mask_color)
 

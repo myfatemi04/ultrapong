@@ -26,8 +26,8 @@ class MatchState:
     ]
 
     transitions = { # (start state, letter) -> new state
-        ("start", "ball_bounced_on_table_1") : "reset", # invalid
-        ("start", "ball_bounced_on_table_2") : "reset", # invalid
+        ("start", "ball_bounced_on_table_1") : "p1_liable_after_hit",
+        ("start", "ball_bounced_on_table_2") : "p2_liable_after_hit", # some leniency in detection time
         ("start", "ball_hit_by_player_1") : "p1_serves",
         ("start", "ball_hit_by_player_2") : "p2_serves",
         ("start", "ball_lost") : "reset", # invalid
@@ -77,5 +77,8 @@ class MatchState:
 
     # Transitions current state and returns the new one
     def transition(self, letter):
-        self._current_state = self.transition[(self._current_state, letter)]
+        key = (self._current_state, letter)
+        if key not in self.transitions.keys():
+            input("Current state:", self._current_state, "...")
+        self._current_state = self.transitions[key]
         return self._current_state

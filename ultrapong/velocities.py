@@ -98,7 +98,7 @@ class BallTracker:
 
         # self.fig.canvas.draw()
         # self.fig.canvas.flush_events()
-        plt.pause(0.01)
+        plt.pause(0.1)
 
     def handle_ball_detection(self, t_, x_, y_):
         self.buf.append((t_, x_, y_))
@@ -133,9 +133,9 @@ class BallTracker:
                     # speak_async("Bounce detected")
                     x_bounce = True
 
-            y_bounce = (y[-3] < y[-2] and y[-1] < y[-2])
+            y_bounce_2 = (y[-3] < y[-2] and y[-1] < y[-2])
             x_continued = (x[-3] < x[-2] < x[-1]) or (x[-3] > x[-2] > x[-1])
-            if y_bounce and x_continued:
+            if y_bounce_2 and x_continued:
                 curr_time = time.time()
                 dt = curr_time - self.last_vertical_bounce
                 if dt > min_time_between_y_bounces:
