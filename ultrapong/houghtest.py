@@ -5,13 +5,15 @@ from collections import deque
 
 import cv2
 import numpy as np
+from velocities import VelocityClassifier
 
 DO_CAPTURE = False
-DO_PLAYBACK = False
+DO_PLAYBACK = True
+DO_STEP_BY_STEP = False
 
 if DO_PLAYBACK:
     assert not DO_CAPTURE
-    cap = cv2.VideoCapture("video_0.mp4")
+    cap = cv2.VideoCapture("video.mp4")
 else:
     cap = cv2.VideoCapture(int(sys.argv[1]))
     cap.set(cv2.CAP_PROP_FPS, 60)
@@ -44,6 +46,13 @@ previous_frame = None
 min_x = 0.1
 max_x = 0.9
 
+event_handler = VelocityClassifier(history_length=90, visualize=True)
+
+roi_mask = (np.ones((1080//4, 1920//4)) * 255).astype(np.uint8)
+roi_mask[:, :int(min_x * roi_mask.shape[1])] = 0
+roi_mask[:, int(max_x * roi_mask.shape[1]):] = 0
+roi_mask[int(0.8 * roi_mask.shape[0]):, :] = 0
+
 counter = 0
 try:
     while True:
@@ -52,7 +61,7 @@ try:
             break
 
         counter += 1
-        if counter < 100:
+        if DO_PLAYBACK and counter < 200:
             continue
 
         if writer is not None:
@@ -89,7 +98,11 @@ try:
         saturation_mask = HSV[..., 1].copy()
         saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
 
-        # value_mask = HSV[..., 2].copy()
+        value_mask = HSV[..., 2].copy()
+        value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
+
+        hue_mask = ((10 < HSV[..., 0]) & (HSV[..., 0] < 40)).astype(np.uint8) * 255
+
         # value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
 
         # skin_mask = cv2.inRange(HSV, skin_lower, skin_upper)
@@ -109,15 +122,12 @@ try:
         previous_frame = raw_frame
 
         # Check saturation and value masks.
-        cv2.imshow('saturation_mask', saturation_mask)
+        # cv2.imshow('saturation_mask', saturation_mask)
         # cv2.imshow('skin_mask', skin_mask)
-        cv2.imshow('motion_mask', motion_mask)
+        # cv2.imshow('motion_mask', motion_mask)
 
-        ball_mask = cv2.bitwise_and(saturation_mask, motion_mask)
-        # ball_mask = cv2.bitwise_and(ball_mask, 255 - skin_mask)
-        ball_mask[:, :int(min_x * ball_mask.shape[1])] = 0
-        ball_mask[:, int(max_x * ball_mask.shape[1]):] = 0
-        # ball_mask = cv2.bitwise_and(cv2.bitwise_and(saturation_mask, value_mask), motion_mask)
+        ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+        ball_mask = ball_mask.astype(np.uint8) * 255
 
         # Erode and dilate.
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -133,6 +143,8 @@ try:
         for historical_mask in history:
             frame[historical_mask > 0, ...] = 255
 
+        detection = None
+
         ball_contours, _ = cv2.findContours(ball_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contours_with_scores = []
         for contour in ball_contours:
@@ -142,10 +154,6 @@ try:
                 continue
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
-
-            is_near_previous_detection = False
-            if previous_detection is not None:
-                is_near_previous_detection = np.linalg.norm(np.array([cX, cY]) - np.array(previous_detection)) < 50
 
             # https://docs.opencv.org/4.x/d1/d32/tutorial_py_contour_properties.html
 
@@ -177,53 +185,37 @@ try:
             above_penalty = 1.0
             area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
 
-            if DO_PLAYBACK:
-                print(solidity, eccentricity, area, area_penalty)
+            score = 0
+            trustworthy = (0.3 < cX/(1920//downsample) < 0.7)
+            if trustworthy:
+                score += 1000000
+            
+            # compare to previous detection
+            if previous_detection is not None:
+                distance = np.linalg.norm(np.array([cX, cY]) - np.array(previous_detection))
+                score -= distance * 1000
 
             # kill tail end detections
             # if not is_near_previous_detection:
-            if area < 5:
-                continue
-            if area > 100:
-                continue
-            if eccentricity > 3:
-                continue
-            if solidity < 0.2:
+            kill = (area < 5 or area > 200 or eccentricity > 10 or solidity < 0.2)
+            if kill:
+                cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
                 continue
 
-            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation
-            contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty))
+            target_x = (1920 // downsample) / 2
+            laterality = ((target_x - int(cX)) / target_x) ** 2
 
-        ### Create detection through previous track of ball ###
-        # if previous_detection is not None:
-        #     # create a window around the previous detection
-        #     x, y = previous_detection
-        #     window_size = 50
-        #     window = frame[max(0, y - window_size):min(frame.shape[0], y + window_size), max(0, x - window_size):min(frame.shape[1], x + window_size)]
-        #     window_dot = window @ transform
-        #     window_dot[window_dot < 0] = 0
-        #     window_ratio = window_dot[..., 0] / ((abs(window_dot[..., 1]) + abs(window_dot[..., 2])) / 2 + 1)
+            if DO_PLAYBACK:
+                print(solidity, eccentricity, area, area_penalty, laterality)
 
-        #     cv2.imshow("window_ratio", np.minimum(100 * window_ratio, 255).astype(np.uint8))
-
-        #     positions = np.zeros((2, *window.shape[:-1]))
-        #     positions[0] = np.expand_dims(np.arange(window.shape[0]), 1).repeat(window.shape[1], axis=1)
-        #     positions[1] = np.expand_dims(np.arange(window.shape[1]), 0).repeat(window.shape[0], axis=0)
-        #     x_frame, y_frame = (positions * window_ratio).sum(axis=(1, 2))/window_ratio.sum()
-        #     x_frame = int(x_frame)
-        #     y_frame = int(y_frame)
-
-        #     pos = (x_frame + max(0, x - window_size), y_frame + max(0, y - window_size))
-        #     # draw a circle around the maximum value
-        #     cv2.circle(frame, pos, 20, (255, 255, 0), 5)
-        #     # store the maximum value
-        #     previous_detection = pos
+            score += solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation - laterality * 100000
+            contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty, laterality))
 
         contours_with_scores.sort(key=lambda x: x[0], reverse=True)
         if len(contours_with_scores) > 0:
             score, contour, *other = contours_with_scores[0]
 
-            solidity, eccentricity, area, area_penalty = other
+            solidity, eccentricity, area, area_penalty, laterality = other
 
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
@@ -238,14 +230,19 @@ try:
             previous_detection = (cX, cY)
 
             if DO_PLAYBACK:
-                print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f}")
+                print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f} {laterality=:.4f}")
+
+            detection = (cX, cY)
         else:
-            previous_detection = None
+            detection = None
+
+        if detection is not None:
+            event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
 
         cv2.imshow('frame', frame)
         # cv2.imshow('ball_mask', ball_mask)
 
-        if cv2.waitKey(0 if DO_PLAYBACK else 1) & 0xFF == ord('q'):
+        if cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF == ord('q'):
             break
 except KeyboardInterrupt:
     print("Interrupted.")
