@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 DO_CAPTURE = False
-DO_PLAYBACK = True
+DO_PLAYBACK = False
 
 if DO_PLAYBACK:
     assert not DO_CAPTURE
@@ -26,7 +26,6 @@ history = deque(maxlen=1)
 
 bgr_ball = np.array([[[0, 127, 255]]], dtype=np.uint8)
 hsv_ball = cv2.cvtColor(bgr_ball, cv2.COLOR_BGR2HSV)[0, 0] # type: ignore
-print(hsv_ball)
 hue_min = hsv_ball[0] - 10
 hue_max = hsv_ball[0] + 10
 
@@ -34,8 +33,16 @@ circle = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)).astype(np.int8)
 circle = (circle * 2 - 1) / sum(np.abs(circle))
 # circle0 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)).astype(np.uint8)
 
+# define the upper and lower boundaries of the HSV pixel
+# intensities to be considered 'skin'
+skin_lower = np.array([0, 48, 80], dtype = "uint8")
+skin_upper = np.array([20, 255, 255], dtype = "uint8")
+
 previous_detection = None
 previous_frame = None
+
+min_x = 0.1
+max_x = 0.9
 
 counter = 0
 try:
@@ -57,7 +64,7 @@ try:
             timestamps.append(time.time())
             if len(timestamps) > 1:
                 fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-                print(fps)
+                print(f"{fps:.3f}")
 
         # Downsample for faster processing.
         downsample = 4
@@ -82,8 +89,10 @@ try:
         saturation_mask = HSV[..., 1].copy()
         saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
 
-        value_mask = HSV[..., 2].copy()
-        value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
+        # value_mask = HSV[..., 2].copy()
+        # value_mask = cv2.adaptiveThreshold(value_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, value_mask)
+
+        # skin_mask = cv2.inRange(HSV, skin_lower, skin_upper)
 
         # Create a motion mask.
         if previous_frame is not None:
@@ -101,10 +110,13 @@ try:
 
         # Check saturation and value masks.
         cv2.imshow('saturation_mask', saturation_mask)
-        cv2.imshow('value_mask', value_mask)
+        # cv2.imshow('skin_mask', skin_mask)
         cv2.imshow('motion_mask', motion_mask)
 
         ball_mask = cv2.bitwise_and(saturation_mask, motion_mask)
+        # ball_mask = cv2.bitwise_and(ball_mask, 255 - skin_mask)
+        ball_mask[:, :int(min_x * ball_mask.shape[1])] = 0
+        ball_mask[:, int(max_x * ball_mask.shape[1]):] = 0
         # ball_mask = cv2.bitwise_and(cv2.bitwise_and(saturation_mask, value_mask), motion_mask)
 
         # Erode and dilate.
@@ -141,8 +153,12 @@ try:
             area = cv2.contourArea(contour)
 
             # get mask
-            # mask = np.zeros_like(ball_mask)
-            # cv2.drawContours(mask, [contour], -1, 255, -1)
+            mask = np.zeros_like(ball_mask)
+            cv2.drawContours(mask, [contour], -1, 255, -1)
+
+            # calculate saturation in mask
+            # rank high-saturation detections higher
+            average_saturation = HSV[..., 1][mask > 0].mean(axis=0)
             
             # get rotated bounding box
             ((_x, _y), (w, h), angle) = cv2.minAreaRect(contour)
@@ -161,7 +177,8 @@ try:
             above_penalty = 1.0
             area_penalty = (min_expected_area - min(area, min_expected_area)) * below_penalty + (max(area, max_expected_area) - max_expected_area) * above_penalty
 
-            print(solidity, eccentricity, area, area_penalty)
+            if DO_PLAYBACK:
+                print(solidity, eccentricity, area, area_penalty)
 
             # kill tail end detections
             # if not is_near_previous_detection:
@@ -174,7 +191,7 @@ try:
             if solidity < 0.2:
                 continue
 
-            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1
+            score = solidity * 0.2 - (eccentricity - 1) * 5 - area_penalty * 0.1 + average_saturation
             contours_with_scores.append((score, contour, solidity, eccentricity, area, area_penalty))
 
         ### Create detection through previous track of ball ###
@@ -208,8 +225,6 @@ try:
 
             solidity, eccentricity, area, area_penalty = other
 
-            print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f}")
-
             # draw the contour and center of the shape on the image
             cv2.drawContours(frame, [contour], -1, (255, 0, 0), -1)
 
@@ -221,13 +236,16 @@ try:
             cY = int(M["m01"] / M["m00"])
             cv2.circle(frame, (cX, cY), 20, (0, 255, 255), 5)
             previous_detection = (cX, cY)
+
+            if DO_PLAYBACK:
+                print(f"{score=:.4f} {solidity=:.4f} {eccentricity=:.4f} {area=:.4f} {area_penalty=:.4f} {cX=:.4f} {cY=:.4f}")
         else:
             previous_detection = None
 
         cv2.imshow('frame', frame)
         # cv2.imshow('ball_mask', ball_mask)
 
-        if cv2.waitKey(0) & 0xFF == ord('q'):
+        if cv2.waitKey(0 if DO_PLAYBACK else 1) & 0xFF == ord('q'):
             break
 except KeyboardInterrupt:
     print("Interrupted.")
