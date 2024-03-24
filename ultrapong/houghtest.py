@@ -5,7 +5,7 @@ from collections import deque
 
 import cv2
 import numpy as np
-from velocities import VelocityClassifier
+from velocities import BallTracker
 import sort
 
 DO_CAPTURE = False
@@ -47,7 +47,7 @@ previous_frame = None
 min_x = 0.1
 max_x = 0.9
 
-event_handler = VelocityClassifier(history_length=90, visualize=True)
+event_handler = BallTracker(history_length=90, visualize=True)
 # ball_filter = 
 
 downsample = 4
@@ -289,13 +289,17 @@ try:
             detection = None
 
         if detection is not None:
-            event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+            (horizontal_bounce, vertical_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
 
         cv2.imshow('ball_mask_color', ball_mask_color)
         cv2.imshow('frame', frame)
 
-        if cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF == ord('q'):
+        key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF
+        if key == ord('q'):
             break
+        elif key == ord('n'):
+            continue
+
 except KeyboardInterrupt:
     print("Interrupted.")
 

@@ -11,7 +11,7 @@ import os
 def speak_async(text: str):
     os.system(f"say '{text}' &")
 
-class VelocityClassifier:
+class BallTracker:
     def __init__(self, history_length=128, visualize=False):
         self.history_length = history_length
         self.visualize = visualize
@@ -66,21 +66,6 @@ class VelocityClassifier:
         x = self.median_filter(x)
         y = self.median_filter(y)
 
-        # Define the filter parameters
-        # order = 4
-        # fs = 1/((t[-1] - t[0]) / len(t))  # Sample rate, Hz
-        # cutoff = 5.0  # Desired cutoff frequency of the filter, Hz
-
-        # # Create a Butterworth low-pass filter
-        # b, a = butter(order, cutoff / (fs / 2), btype='low')
-        
-        # # Apply the filter to x and y
-        # x_filtered = filtfilt(b, a, x)
-        # y_filtered = filtfilt(b, a, y)
-
-        # Calculate the velocity
-        # vx = (x_filtered[1:] - x_filtered[:-1]) * (t[1:] - t[:-1])
-        # vy = (y_filtered[1:] - y_filtered[:-1]) * (t[1:] - t[:-1])
         vx = (x[1:] - x[:-1]) * (t[1:] - t[:-1])
         vy = (y[1:] - y[:-1]) * (t[1:] - t[:-1])
 
@@ -124,6 +109,9 @@ class VelocityClassifier:
             if self.counter % show_every == 0:
                 self.visualize_history()
 
+        x_bounce = False
+        y_bounce = False
+
         # bounce detection (vy)
         if len(self.buf) >= 10:
             # vx, vy = self.calculate_velocity()
@@ -142,6 +130,7 @@ class VelocityClassifier:
                     self.last_horizontal_bounce = time.time()
                     print('x bounce detected', time.time())
                     # speak_async("Bounce detected")
+                    x_bounce = True
 
             y_bounce = (y[-3] < y[-2] and y[-1] < y[-2])
             x_continued = (x[-3] < x[-2] < x[-1]) and (x[-3] > x[-2] > x[-1])
@@ -152,3 +141,6 @@ class VelocityClassifier:
                     self.last_vertical_bounce = time.time()
                     print('y bounce detected', time.time())
                     # speak_async("Bounce detected")
+                    y_bounce = True
+
+        return x_bounce, y_bounce
