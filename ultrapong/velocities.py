@@ -122,19 +122,19 @@ class BallTracker:
             min_time_between_x_bounces = 0.7
             min_time_between_y_bounces = 0.7
 
-            x_bounce_left = (x[-3] < x[-2] and x[-1] < x[-2])
-            x_bounce_right = (x[-3] > x[-2] and x[-1] > x[-2])
+            x_bounce_right = (x[-3] < x[-2] and x[-1] < x[-2])
+            x_bounce_left = (x[-3] > x[-2] and x[-1] > x[-2])
             if x_bounce_left or x_bounce_right:
                 curr_time = time.time()
                 dt = curr_time - self.last_horizontal_bounce
                 if dt > min_time_between_x_bounces:
                     self.last_horizontal_bounce = time.time()
-                    print('x bounce detected', time.time())
+                    print('x bounce detected', time.time(), 'on', 'left' if x_bounce_left else 'right', 'side')
                     # speak_async("Bounce detected")
                     x_bounce = True
 
             y_bounce = (y[-3] < y[-2] and y[-1] < y[-2])
-            x_continued = (x[-3] < x[-2] < x[-1]) and (x[-3] > x[-2] > x[-1])
+            x_continued = (x[-3] < x[-2] < x[-1]) or (x[-3] > x[-2] > x[-1])
             if y_bounce and x_continued:
                 curr_time = time.time()
                 dt = curr_time - self.last_vertical_bounce
