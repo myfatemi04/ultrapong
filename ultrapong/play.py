@@ -8,6 +8,8 @@ import numpy as np
 from velocities import BallTracker
 import sort
 from detect_ball import detect_ball
+from detect_table import detect_table
+from check_table_side import check_table_side, get_table_points
 
 DO_CAPTURE = False
 DO_PLAYBACK = True
@@ -21,7 +23,7 @@ else:
     cap.set(cv2.CAP_PROP_FPS, 60)
 
 if DO_CAPTURE:
-    writer = cv2.VideoWriter("video_tmp.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1920, 1080))
+    writer = cv2.VideoWriter("video_tmp.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (1920, 1080)) # type: ignore
 else:
     writer = None
 
@@ -65,6 +67,8 @@ recent_detections = deque(maxlen=4)
 
 tracker = sort.Sort()
 
+table_detection = None
+
 counter = 0
 try:
     while True:
@@ -76,9 +80,6 @@ try:
         if DO_PLAYBACK and counter < 200:
             continue
 
-        if writer is not None:
-            writer.write(frame)
-
         if DO_PLAYBACK:
             time.sleep(0.1)
         else:
@@ -87,20 +88,40 @@ try:
                 fps = len(timestamps) / (timestamps[-1] - timestamps[0])
                 # print(f"{fps:.3f}")
 
+        if writer is not None:
+            writer.write(frame)
+
         # Downsample for faster processing.
         downsample = 4
         frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
         raw_frame = frame.copy()
+        if table_detection is None:
+            C, table_mask = detect_table(frame)
+            if C is not None:
+                table_detection = C
+        else:
+            # Table has been found!
+            detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height)
+            previous_frame = raw_frame
 
-        detection, ball_mask, ball_mask_color, frame = detect_ball(frame.copy(), previous_frame, roi_mask, frame_width, frame_height)
-        previous_frame = raw_frame
+            middle_top, middle_bottom = get_table_points(table_detection)
 
-        if detection is not None:
-            (horizontal_bounce, vertical_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+            cv2.line(frame, middle_top.astype(int), middle_bottom.astype(int), (0, 200, 255), 5, cv2.LINE_AA) # type: ignore
 
-        cv2.imshow('ball_mask_color', ball_mask_color)
+            if detection is not None:
+                ball_side = check_table_side(middle_top, middle_bottom, detection[0], detection[1])
 
-        frame[ball_mask > 0] = 255 # type: ignore
+                if ball_side: # left
+                    frame[ball_mask > 0, :] = (255, 0, 255)
+                else:
+                    frame[ball_mask > 0, :] = (0, 255, 0)
+
+            if detection is not None:
+                (x_bounce_left, x_bounce_right, y_bounce) = event_handler.handle_ball_detection(time.time(), detection[0], detection[1])
+
+            cv2.imshow('ball_mask_color', ball_mask_color)
+
+            # frame[ball_mask > 0] = 255 # type: ignore
         cv2.imshow('frame', frame)
 
         key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF

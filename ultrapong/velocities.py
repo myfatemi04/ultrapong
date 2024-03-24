@@ -109,7 +109,7 @@ class BallTracker:
             if self.counter % show_every == 0:
                 self.visualize_history()
 
-        x_bounce = False
+        x_bounce_left = x_bounce_right = False
         y_bounce = False
 
         # bounce detection (vy)
@@ -122,8 +122,9 @@ class BallTracker:
             min_time_between_x_bounces = 0.7
             min_time_between_y_bounces = 0.7
 
-            x_bounce = (x[-3] < x[-2] and x[-1] < x[-2])
-            if x_bounce:
+            x_bounce_left = (x[-3] < x[-2] and x[-1] < x[-2])
+            x_bounce_right = (x[-3] > x[-2] and x[-1] > x[-2])
+            if x_bounce_left or x_bounce_right:
                 curr_time = time.time()
                 dt = curr_time - self.last_horizontal_bounce
                 if dt > min_time_between_x_bounces:
@@ -143,4 +144,4 @@ class BallTracker:
                     # speak_async("Bounce detected")
                     y_bounce = True
 
-        return x_bounce, y_bounce
+        return x_bounce_left, x_bounce_right, y_bounce

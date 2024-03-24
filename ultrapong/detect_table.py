@@ -4,8 +4,6 @@ import numpy as np
 from collections import deque
 
 def detect_table(frame):
-    frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
-
     # Detect circles
     # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # kernel = np.array([0.0, 0.2, 0.8]) # bgr
@@ -48,7 +46,7 @@ def detect_table(frame):
                     if cv2.pointPolygonTest(contour,(coord[0],coord[1]),True) < 0:
                         count += 1
                 if count/len(contour) >= 0.8:
-                    potential_contours.append(contour)
+                    potential_contours.append(approx)
                     # draw the approximation in green color
                     cv2.drawContours(frame, [approx], 0, (0, 255, 0), 2)
 
@@ -62,43 +60,34 @@ def detect_table(frame):
 
         # returns left contour and then right contour
         if cx1 < cx2:
-            return potential_contours[0], potential_contours[1]
+            C = potential_contours[0], potential_contours[1]
         else:
-            return potential_contours[1], potential_contours[0]
+            C = potential_contours[1], potential_contours[0]
+    else:
+        C = None
 
-cap = cv2.VideoCapture(1)
-isImage = True
+    return C, table_mask
 
-timestamps = deque(maxlen=10)
+# test if you want
+if __name__ == '__main__':
+    cap = cv2.VideoCapture(1)
+    isImage = True
 
-while True:
-    ret, frame = cap.read()
+    timestamps = deque(maxlen=10)
 
-    timestamps.append(time.time())
-    if len(timestamps) > 1:
-        fps = len(timestamps) / (timestamps[-1] - timestamps[0])
-        #print(fps)
+    while True:
+        ret, frame = cap.read()
 
-    downsample = 4
+        downsample = 4
+        frame = np.ascontiguousarray(frame[::downsample, ::downsample, :])
+        C, table_mask = detect_table(frame)
 
+        cv2.imshow('frame', frame)
+        cv2.imshow('table_mask', table_mask)
 
-    cv2.imshow('frame', frame)
-    cv2.imshow('table_mask', table_mask)
-    key = cv2.waitKey(1)
-    if key == ord('s'):
-        # Save the captured frame as a still image
-        cv2.drawContours(table_mask, [potential_contours[0]], 0, (255, 255, 255), thickness=cv2.FILLED)
-        cv2.imwrite('mask.jpg', table_mask)
-        cv2.imwrite('adaptivemask.jpg', table_mask_a)
-        cv2.imwrite("snapshot.jpg", frame)
-        
-        print("Snapshot captured as snapshot.jpg")
-        print("mask captured as mask.jpg")
-        # Perform segmentation on the captured frame
-        #perform_segmentation("snapshot.jpg")
-    
-    if key == ord('q'):
-        break
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
 
-cap.release()
-cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()

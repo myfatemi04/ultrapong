@@ -39,8 +39,8 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height):
     saturation_mask = HSV[..., 1].copy()
     saturation_mask = cv2.adaptiveThreshold(saturation_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, -2, saturation_mask)
 
-    value_mask = HSV[..., 2].copy()
-    value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
+    value_mask = HSV[..., 2] > 40
+    # value_mask = cv2.threshold(value_mask, 40, 255, cv2.THRESH_BINARY)[1]
 
     hue_mask = ((30 < HSV[..., 0]) & (HSV[..., 0] < 100)).astype(np.uint8) * 255
     # hue_mask = (frame_blurred[..., 1] > (frame_blurred[..., 0] + frame_blurred[..., 2])).astype(np.uint8) * 255
@@ -61,11 +61,11 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height):
         motion_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
 
     # Check saturation and value masks.
-    cv2.imshow('saturation_mask', saturation_mask)
-    cv2.imshow('motion_mask', motion_mask)
-    cv2.imshow('hue_mask', hue_mask)
+    # cv2.imshow('saturation_mask', saturation_mask)
+    # cv2.imshow('motion_mask', motion_mask)
+    # cv2.imshow('hue_mask', hue_mask)
 
-    ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
+    ball_mask = (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0) & (value_mask > 0)
     # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
     # ball_mask = (saturation_mask > 0) & (motion_mask > 0) & (value_mask > 0) & (hue_mask > 0) & (roi_mask > 0)
     ball_mask = ball_mask.astype(np.uint8) * 255
@@ -145,7 +145,7 @@ def detect_ball(raw_frame, previous_frame, roi_mask, frame_width, frame_height):
 
         # compare to previous detections (to come soon)
         
-        kill = (area < 10 or area > 200 or eccentricity > 10 or convexity < 0.2)
+        kill = (area < 5 or area > 200 or eccentricity > 10 or convexity < 0.2)
         if kill:
             cv2.drawContours(frame, [contour], -1, (0, 0, 255), -1)
             continue
