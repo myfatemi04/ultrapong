@@ -13,7 +13,7 @@ def detect_table(frame):
     frame_blurred = cv2.medianBlur(frame, 5)
     table_mask = (
         (frame/255.0 >= (np.array([0.15, 0.15, 0.15]))).all(axis=-1) & 
-        (frame/255.0 <= (np.array([0.5, 0.4, 0.4]))).all(axis=-1) &
+        (frame/255.0 <= (np.array([0.5, 0.5, 0.5]))).all(axis=-1) &
         (frame[..., 2].astype(np.short) - frame[..., 0].astype(np.short) < 15) &
         (frame[..., 2].astype(np.short) - frame[..., 1].astype(np.short) < 15)
         # (frame_blurred[..., 0] > frame_blurred[..., 2] * 0.5)
@@ -32,12 +32,12 @@ def detect_table(frame):
     for contour in contours:
         # Approximate the contour to a polygon
         perimeter = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+        approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True)
 
         # Check if the polygon has 4 sides (potential rectangle/table)
         if len(approx) == 4:
             area = cv2.contourArea(contour)
-            if area > 100:  # Assuming the table will have a significant area
+            if area > 1000:  # Assuming the table will have a significant area
                 # Draw the contour on the original image
                 proper_contour = contour
                 max_area = area

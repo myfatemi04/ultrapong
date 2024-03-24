@@ -20,7 +20,7 @@ def speak_async(text: str):
 def main():
 
     DO_CAPTURE = False
-    DO_PLAYBACK = True
+    DO_PLAYBACK = False
     DO_STEP_BY_STEP = False
 
     if DO_PLAYBACK:
@@ -227,7 +227,7 @@ def main():
                 # frame[ball_mask > 0] = 255 # type: ignore
             cv2.imshow('frame', frame)
 
-            if pause:
+            if pause and DO_PLAYBACK:
                 input()
 
             key = cv2.waitKey(0 if DO_STEP_BY_STEP else 1) & 0xFF
