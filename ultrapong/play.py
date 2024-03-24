@@ -5,14 +5,17 @@ from collections import deque
 
 import cv2
 import numpy as np
-from velocities import BallTracker
+from check_table_side import get_net_offset, get_table_points
+from commentary import Commentary
 from detect_ball import detect_ball
 from detect_table import detect_table
-from check_table_side import get_net_offset, get_table_points
-from states import MatchState
 from point_tracker import PointTracker
+from states import MatchState
+from velocities import BallTracker
 
-import os
+
+def speak_sync(text: str):
+    os.system(f"say '{text}'")
 
 def speak_async(text: str):
     os.system(f"say '{text}' &")
@@ -46,6 +49,7 @@ def main():
     max_x = 0.9
 
     ball_tracker = BallTracker(history_length=90, visualize=False)
+    commentary = Commentary()
 
     downsample = 4
 
@@ -213,23 +217,24 @@ def main():
                         print("Someone lost!")
                         match_state._current_state = "standby"
 
+                        comms = ""
                         if s == 'p1_loses':
                             match_outcome = point_tracker.update(2)
+                            comms = commentary.get_commentary(2)
                         elif s == 'p2_loses':
                             match_outcome = point_tracker.update(1)
+                            comms = commentary.get_commentary(1)
 
                         if match_outcome is not None:
-                            speak_async(f"Player {match_outcome} wins!")
+                            comms += f" Player {match_outcome} wins!"
                             match_state._current_state = "standby"
                             point_tracker.reset()
-                        else:
-                            speak_async("Player " + str(3 - int(s[1])) + " scored a point!")
+                            commentary.reset()
+                            
+                        speak_async(comms)
 
                     # draw the filtered detection
                     cv2.circle(frame, (int(x_), int(y_)), 10, (255, 0, 0), 3)
-                    
-
-                # cv2.imshow('ball_mask_color', ball_mask_color)
 
                 # frame[ball_mask > 0] = 255 # type: ignore
             cv2.imshow('frame', frame)
