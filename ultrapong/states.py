@@ -49,12 +49,14 @@ class MatchState:
         ("p1_liable_after_hit", "ball_hit_by_player_1") : "p1_loses",
         ("p1_liable_after_hit", "ball_hit_by_player_2") : "p2_loses",
         ("p1_liable_after_hit", "ball_lost") : "p1_loses",
+        ("p1_liable_after_hit", "net_hit_by_player_1") : "p1_loses",
 
         ("p2_liable_after_hit", "ball_bounced_on_table_1") : "p1_liable_before_hit",
         ("p2_liable_after_hit", "ball_bounced_on_table_2") : "p2_loses",
         ("p2_liable_after_hit", "ball_hit_by_player_1") : "p1_loses",
         ("p2_liable_after_hit", "ball_hit_by_player_2") : "p2_loses",
         ("p2_liable_after_hit", "ball_lost") : "p2_loses",
+        ("p2_liable_after_hit", "net_hit_by_player_2") : "p2_loses",
 
         ("p1_liable_before_hit", "ball_bounced_on_table_1") : "p1_loses",
         ("p1_liable_before_hit", "ball_bounced_on_table_2") : "p1_loses",

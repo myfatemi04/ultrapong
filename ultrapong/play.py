@@ -75,13 +75,15 @@ def main():
                 break
 
             counter += 1
-            if DO_PLAYBACK and counter < 200:
+            if DO_PLAYBACK and counter < 260:
+                match_state._current_state = "p2_liable_after_hit"
                 continue
 
             artificial_time += 0.1
 
             if DO_PLAYBACK:
-                # time.sleep(0.1)
+                if counter < 400:
+                    time.sleep(0.01)
                 pass
             else:
                 timestamps.append(time.time())
@@ -140,17 +142,29 @@ def main():
                         if PRINT_RESULTS:
                             print("ball_bounced_on_table_2")
                             print("RESULT", result)
-                    elif x_bounce and ball_side == 0:
+                    elif x_bounce_left and ball_side == 0:
                         ball_lost_counter = 0
                         result = match_state.transition("ball_hit_by_player_1")
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_1", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
-                    elif x_bounce and ball_side == 1:
+                    elif x_bounce_right and ball_side == 0:
+                        ball_lost_counter = 0
+                        result = match_state.transition("net_hit_by_player_1")
+                        if PRINT_RESULTS:
+                            print("net_hit_by_player_1", "ball_side", ball_side, detection[0])
+                            print("RESULT", result)
+                    elif x_bounce_right and ball_side == 1:
                         ball_lost_counter = 0
                         result = match_state.transition("ball_hit_by_player_2")
                         if PRINT_RESULTS:
                             print("ball_hit_by_player_2", "ball_side", ball_side, detection[0])
+                            print("RESULT", result)
+                    elif x_bounce_left and ball_side == 1:
+                        ball_lost_counter = 0
+                        result = match_state.transition("net_hit_by_player_2")
+                        if PRINT_RESULTS:
+                            print("net_hit_by_player_2", "ball_side", ball_side, detection[0])
                             print("RESULT", result)
                     elif detection[1] > middle_bottom[1]:
                         ball_lost_counter += 1
